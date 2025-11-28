@@ -167,16 +167,16 @@ INT fx_stm32_sd_write_blocks(UINT instance, UINT *buffer, UINT start_block, UINT
 void HAL_SD_TxCpltCallback(SD_HandleTypeDef *hsd)
 {
   /* USER CODE BEGIN PRE_TX_CMPLT */
-
+ // 非阻塞DMA情况读写SD卡API完成后此中断回调函数会被调用
   /* USER CODE END PRE_TX_CMPLT */
 
   tx_semaphore_put(&sd_tx_semaphore);
 
   /* USER CODE BEGIN POST_TX_CMPLT */
-//  if (tx_event_flags_set(&EventFlag, SD_WRITE_FLAG, TX_OR) != TX_SUCCESS)
-//  {
-//    Error_Handler();
-//  }
+  if (tx_event_flags_set(&EventFlag, SD_WRITE_FLAG, TX_OR) != TX_SUCCESS)
+  {
+    Error_Handler();
+  }
   /* USER CODE END POST_TX_CMPLT */
 }
 
@@ -194,10 +194,10 @@ void HAL_SD_RxCpltCallback(SD_HandleTypeDef *hsd)
   tx_semaphore_put(&sd_rx_semaphore);
 
   /* USER CODE BEGIN POST_RX_CMPLT */
-//  if (tx_event_flags_set(&EventFlag, SD_READ_FLAG, TX_OR) != TX_SUCCESS)
-//  {
-//    Error_Handler();
-//  }
+  if (tx_event_flags_set(&EventFlag, SD_READ_FLAG, TX_OR) != TX_SUCCESS)
+  {
+    Error_Handler();
+  }
   /* USER CODE END POST_RX_CMPLT */
 }
 

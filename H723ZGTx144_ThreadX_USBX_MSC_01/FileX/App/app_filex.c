@@ -134,7 +134,13 @@ void fx_app_thread_entry(ULONG thread_input)
 {
   UINT sd_status = FX_SUCCESS;
   /* USER CODE BEGIN fx_app_thread_entry 0 */
-
+  /**
+   * https://forum.anfulai.cn/forum.php?mod=viewthread&tid=128791&highlight=usbx%2Bmsc
+   * 原帖作者说到：FileX和USBX都开启，会有资源访问冲突的问题，我这边的临时解决方案是挂起FileX相关任务。后边可能会使用互斥信号量来解决。
+   *
+   * 我实测，加这个才会 Os 优化编译弹出 有容量的磁盘
+   */
+  tx_thread_suspend(&fx_app_thread);
   /* USER CODE END fx_app_thread_entry 0 */
 
   /* Open the SD disk driver */

@@ -58,7 +58,7 @@ void MX_SDMMC2_SD_Init(void)
       // total_capacity现在包含了SD卡的总容量（以字节为单位）
       // 您可以根据需要将其转换为MB或GB，例如：
       // float capacity_mb = (float)total_capacity / (1024 * 1024);
-      HAL_Delay(10);
+      //HAL_Delay(10);
   }
   /* USER CODE END SDMMC2_Init 2 */
 
@@ -112,7 +112,7 @@ void HAL_SD_MspInit(SD_HandleTypeDef* sdHandle)
     HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
     /* SDMMC2 interrupt Init */
-    HAL_NVIC_SetPriority(SDMMC2_IRQn, 0, 0);
+    HAL_NVIC_SetPriority(SDMMC2_IRQn, 5, 0);
     HAL_NVIC_EnableIRQ(SDMMC2_IRQn);
   /* USER CODE BEGIN SDMMC2_MspInit 1 */
 

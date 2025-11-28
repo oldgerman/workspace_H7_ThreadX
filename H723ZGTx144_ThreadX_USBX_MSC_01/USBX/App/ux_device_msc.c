@@ -30,6 +30,7 @@
 #include "sdmmc.h"
 #include "main.h"
 #include "fx_stm32_sd_driver.h"
+#include "app_filex.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -58,95 +59,6 @@ extern HAL_SD_CardInfoTypeDef USBD_SD_CardInfo;
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN PFP */
 static int32_t check_sd_status(VOID);
-/**
-  * @brief  SD status structure definition
-  */
-#define   MSD_OK                        ((uint8_t)0x00)
-#define   MSD_ERROR                     ((uint8_t)0x01)
-#define   MSD_ERROR_SD_NOT_PRESENT      ((uint8_t)0x02)
-/**
-  * @brief  Reads block(s) from a specified address in an SD card, in polling mode.
-  * @param  pData: Pointer to the buffer that will contain the data to transmit
-  * @param  ReadAddr: Address from where data is to be read
-  * @param  NumOfBlocks: Number of SD blocks to read
-  * @param  Timeout: Timeout for read operation
-  * @retval SD status
-  */
-uint8_t BSP_SD_ReadBlocks(uint32_t *pData, uint32_t ReadAddr, uint32_t NumOfBlocks, uint32_t Timeout)
-{
-
-  if( HAL_SD_ReadBlocks(&hsd2, (uint8_t *)pData, ReadAddr, NumOfBlocks, Timeout) == HAL_OK)
-  {
-    return MSD_OK;
-  }
-  else
-  {
-    return MSD_ERROR;
-  }
-
-}
-
-/**
-  * @brief  Writes block(s) to a specified address in an SD card, in polling mode.
-  * @param  pData: Pointer to the buffer that will contain the data to transmit
-  * @param  WriteAddr: Address from where data is to be written
-  * @param  NumOfBlocks: Number of SD blocks to write
-  * @param  Timeout: Timeout for write operation
-  * @retval SD status
-  */
-uint8_t BSP_SD_WriteBlocks(uint32_t *pData, uint32_t WriteAddr, uint32_t NumOfBlocks, uint32_t Timeout)
-{
-
-  if( HAL_SD_WriteBlocks(&hsd2, (uint8_t *)pData, WriteAddr, NumOfBlocks, Timeout) == HAL_OK)
-  {
-    return MSD_OK;
-  }
-  else
-  {
-    return MSD_ERROR;
-  }
-}
-
-/**
-  * @brief  Reads block(s) from a specified address in an SD card, in DMA mode.
-  * @param  pData: Pointer to the buffer that will contain the data to transmit
-  * @param  ReadAddr: Address from where data is to be read
-  * @param  NumOfBlocks: Number of SD blocks to read
-  * @retval SD status
-  */
-uint8_t BSP_SD_ReadBlocks_DMA(uint32_t *pData, uint32_t ReadAddr, uint32_t NumOfBlocks)
-{
-
-  if( HAL_SD_ReadBlocks_DMA(&hsd2, (uint8_t *)pData, ReadAddr, NumOfBlocks) == HAL_OK)
-  {
-    return MSD_OK;
-  }
-  else
-  {
-    return MSD_ERROR;
-  }
-}
-
-/**
-  * @brief  Writes block(s) to a specified address in an SD card, in DMA mode.
-  * @param  pData: Pointer to the buffer that will contain the data to transmit
-  * @param  WriteAddr: Address from where data is to be written
-  * @param  NumOfBlocks: Number of SD blocks to write
-  * @retval SD status
-  */
-uint8_t BSP_SD_WriteBlocks_DMA(uint32_t *pData, uint32_t WriteAddr, uint32_t NumOfBlocks)
-{
-
-  if( HAL_SD_WriteBlocks_DMA(&hsd2, (uint8_t *)pData, WriteAddr, NumOfBlocks) == HAL_OK)
-  {
-    return MSD_OK;
-  }
-  else
-  {
-    return MSD_ERROR;
-  }
-
-}
 
 /* USER CODE END PFP */
 
@@ -205,39 +117,34 @@ UINT USBD_STORAGE_Read(VOID *storage_instance, ULONG lun, UCHAR *data_pointer,
   /* USER CODE BEGIN USBD_STORAGE_Read */
   UX_PARAMETER_NOT_USED(storage_instance);
   UX_PARAMETER_NOT_USED(lun);
-  UX_PARAMETER_NOT_USED(data_pointer);
-  UX_PARAMETER_NOT_USED(number_blocks);
-  UX_PARAMETER_NOT_USED(lba);
   UX_PARAMETER_NOT_USED(media_status);
-#if 0
+
   ULONG ReadFlags = 0U;
 
   /* Check if the SD card is present */
-//  if (HAL_GPIO_ReadPin(GPIOG, GPIO_PIN_12) == GPIO_PIN_SET) {
+//  if (HAL_GPIO_ReadPin(GPIOF, GPIO_PIN_5) != GPIO_PIN_RESET)
+//  {
     /* Check id SD card is ready */
-    if (check_sd_status() != HAL_OK) {
-    	_Error_Handler(__FILE__, __LINE__);
+    if(check_sd_status() != HAL_OK)
+    {
+      _Error_Handler(__FILE__, __LINE__);
     }
 
     /* Start the Dma write */
-    status = HAL_SD_ReadBlocks_DMA(&hsd2, data_pointer, lba, number_blocks);
-    if (status != HAL_OK) {
+    status =  HAL_SD_ReadBlocks_DMA(&hsd2, data_pointer, lba, number_blocks);
+    if(status != HAL_OK)
+    {
       _Error_Handler(__FILE__, __LINE__);
     }
 
     /* Wait on readflag until SD card is ready to use for new operation */
     if (tx_event_flags_get(&EventFlag, SD_READ_FLAG, TX_OR_CLEAR,
-                           &ReadFlags, TX_WAIT_FOREVER) != TX_SUCCESS) {
+                           &ReadFlags, TX_WAIT_FOREVER) != TX_SUCCESS)
+    {
       _Error_Handler(__FILE__, __LINE__);
     }
 //  }
-#else
 
-    BSP_SD_ReadBlocks((uint32_t *) data_pointer, lba, number_blocks, 500);
-    //while(BSP_SD_GetCardState() != SD_TRANSFER_OK);
-    status = check_sd_status();
-
-#endif
   /* USER CODE END USBD_STORAGE_Read */
 
   return status;
@@ -263,40 +170,35 @@ UINT USBD_STORAGE_Write(VOID *storage_instance, ULONG lun, UCHAR *data_pointer,
   /* USER CODE BEGIN USBD_STORAGE_Write */
   UX_PARAMETER_NOT_USED(storage_instance);
   UX_PARAMETER_NOT_USED(lun);
-  UX_PARAMETER_NOT_USED(data_pointer);
-  UX_PARAMETER_NOT_USED(number_blocks);
-  UX_PARAMETER_NOT_USED(lba);
   UX_PARAMETER_NOT_USED(media_status);
-#if 0
+
   ULONG WriteFlags = 0U;
 
   /* Check if the SD card is present */
-//  if (HAL_GPIO_ReadPin(GPIOG, GPIO_PIN_12) == GPIO_PIN_SET) {
-
-    /* Check id SD card is ready */
-    if (check_sd_status() != HAL_OK) {
+//  if (HAL_GPIO_ReadPin(GPIOF, GPIO_PIN_5) != GPIO_PIN_RESET)
+//  {
+    /* Check if SD card is ready */
+    if(check_sd_status() != HAL_OK)
+    {
       _Error_Handler(__FILE__, __LINE__);
     }
 
     /* Start the Dma write */
     status = HAL_SD_WriteBlocks_DMA(&hsd2, data_pointer, lba, number_blocks);
 
-    if (status != HAL_OK) {
+    if(status != HAL_OK)
+    {
       _Error_Handler(__FILE__, __LINE__);
     }
 
     /* Wait on writeflag until SD card is ready to use for new operation */
     if (tx_event_flags_get(&EventFlag, SD_WRITE_FLAG, TX_OR_CLEAR,
-                           &WriteFlags, TX_WAIT_FOREVER) != TX_SUCCESS) {
+                           &WriteFlags, TX_WAIT_FOREVER) != TX_SUCCESS)
+    {
       _Error_Handler(__FILE__, __LINE__);
     }
 //  }
-#else
 
-     BSP_SD_WriteBlocks((uint32_t *) data_pointer, lba, number_blocks, 500);
-     //while(BSP_SD_GetCardState() != SD_TRANSFER_OK);
-     status = check_sd_status();
-#endif
   /* USER CODE END USBD_STORAGE_Write */
 
   return status;
@@ -394,7 +296,11 @@ ULONG USBD_STORAGE_GetMediaLastLba(VOID)
   ULONG LastLba = 0U;
 
   /* USER CODE BEGIN USBD_STORAGE_GetMediaLastLba */
+#if 1
   LastLba = (ULONG)(USBD_SD_CardInfo.BlockNbr - 1);
+#else
+  LastLba = (ULONG)(hsd2.SdCard.BlockNbr -1);
+#endif
   /* USER CODE END USBD_STORAGE_GetMediaLastLba */
 
   return LastLba;
@@ -411,14 +317,17 @@ ULONG USBD_STORAGE_GetMediaBlocklength(VOID)
   ULONG MediaBlockLen = 0U;
 
   /* USER CODE BEGIN USBD_STORAGE_GetMediaBlocklength */
+#if 1
   MediaBlockLen = (ULONG) USBD_SD_CardInfo.BlockSize;
+#else
+  MediaBlockLen = (ULONG) hsd2.SdCard.BlockSize;
+#endif
   /* USER CODE END USBD_STORAGE_GetMediaBlocklength */
 
   return MediaBlockLen;
 }
 
 /* USER CODE BEGIN 2 */
-
 
 /**
   * @brief  check_sd_status

@@ -110,7 +110,7 @@
 /* Defines the size in bytes of the bit map used to update the secondary FAT sectors.
    The larger the value the less unnecessary secondary FAT sector writes.   */
 
-/* #define FX_FAT_MAP_SIZE         128 */
+#define FX_FAT_MAP_SIZE         1024
 
 /* Defined, data sector write requests are flushed immediately to the driver.  */
 
@@ -127,7 +127,7 @@
 
 /* Defines the number of entries in the FAT cache.  */
 
-/* #define FX_MAX_FAT_CACHE         16 */
+#define FX_MAX_FAT_CACHE        1024
 
 /* Defines the maximum size of long file names supported by FileX.
    The minimum value is 13 and the maximum value is 256.  */
@@ -138,7 +138,7 @@
 /* Defines the maximum number of logical sectors that can be cached by FileX. The cache memory
    supplied to FileX at fx_media_open determines how many sectors can actually be cached.  */
 
-/* #define FX_MAX_SECTOR_CACHE         256 */
+#define FX_MAX_SECTOR_CACHE       1024
 
 /* Defined, the file search cache optimization is disabled.  */
 

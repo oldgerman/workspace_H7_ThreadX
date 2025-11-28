@@ -47,7 +47,7 @@ extern "C" {
 
 #define USBD_MSC_CLASS_ACTIVATED                       1U
 
-#define USBD_CONFIG_MAXPOWER                           25U
+#define USBD_CONFIG_MAXPOWER                           250U
 #define USBD_COMPOSITE_USE_IAD                         1U
 #define USBD_DEVICE_FRAMEWORK_BUILDER_ENABLED          1U
 
