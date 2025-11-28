@@ -1,0 +1,12 @@
+.metadata
+Backup
+
+*.zip
+*.Zip
+*.7z
+*.7Z
+*rar
+
+01.ThreadX_Note
+02.Ref_Projects
+03.Zip
