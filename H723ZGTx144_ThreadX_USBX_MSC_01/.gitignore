@@ -1,2 +1,9 @@
-/Debug/
-/Release/
+Debug/**/*
+!Debug/**/*.hex
+!Debug/
+!Debug/**/
+
+Release/**/*
+!Release/**/*.hex
+!Release/
+!Release/**/
