@@ -2,7 +2,7 @@
 
 ## 关于
 
-在 H723ZGTx144_ThreadX_USBX_MSC_02 基础上将主内存从 AXISRAM 切换为 DTCM，
+在 H723ZGTx144_ThreadX_USBX_MSC_01 基础上将主内存从 AXISRAM 切换为 DTCM，
 
 使用 attribute 将放在DTCM中导致不能正常工作的变量放到 .axisram2_bss和 .axisram2_data，MPU不开cache和buffer
 
@@ -12,6 +12,16 @@ main函数中已经复制中断向量表到DTCM
 
 ## 配置
 
+### 需要魔改： .ld 链接脚本 和 .s启动文件
+
+本工程链接脚本使用：H723ZGTx144_ThreadX_USBX_MSC_02.ld
+
+本工程启动文件使用：\APP\startup_stm32h723zgtx.s，需要在项目中排除原本的 \Core\Startup\\startup_stm32h723zgtx.s
+
+（详细修改见文件源码，这里不解说）
+
+### USBX：不可开读cache和写cache的变量
+
 参考：[STM32H735G-DK/Applications/USBX/Ux_Device_MSC](https://github.com/STMicroelectronics/x-cube-azrtos-h7/tree/main/Projects/STM32H735G-DK/Applications/USBX/Ux_Device_MSC)
 
 > #### **USBX 使用提示**
@@ -19,15 +29,15 @@ main函数中已经复制中断向量表到DTCM
 > - 如果启用了 USB DMA，则应用程序不应使用 DTCM (0x20000000) 内存区域。
 > - 应确保将 **USB 内存池**区域配置为“**不可缓存**（Non-Cacheable）”属性，以确保 CPU 和 USB DMA 之间的一致性。
 
-## USBX：不可开读cache和写cache的变量
+MPU配置参考：[STM32H7视频教程第14期：超干货，MPU和Cache实战，一张图了解所有经典配置案例...](https://www.cnblogs.com/armfly/p/16245867.html)
 
-> 我将AXISRAM占用了ITCM共享区设为320K，然后在 .ld 链接脚本中，划分为 AXISRAM1 和 AXISRAM2
->
+我将AXISRAM占用了ITCM共享区设为320K，然后在 .ld 链接脚本中，划分为 AXISRAM1 和 AXISRAM2
+
 > .axisram1 是NORMAL最强性能模式，读 Cache 开启、写 Cache 开启
 >
 > ```c
->   MPU_InitStruct.Enable = MPU_REGION_ENABLE;
->   MPU_InitStruct.Number = MPU_REGION_NUMBER0;
+>MPU_InitStruct.Enable = MPU_REGION_ENABLE;
+> MPU_InitStruct.Number = MPU_REGION_NUMBER0;
 >   MPU_InitStruct.BaseAddress = 0x24000000;
 >   MPU_InitStruct.Size = MPU_REGION_SIZE_256KB;
 >   MPU_InitStruct.SubRegionDisable = 0;
@@ -37,13 +47,13 @@ main函数中已经复制中断向量表到DTCM
 >   MPU_InitStruct.IsShareable = MPU_ACCESS_NOT_SHAREABLE;
 >   MPU_InitStruct.IsCacheable = MPU_ACCESS_CACHEABLE;
 >   MPU_InitStruct.IsBufferable = MPU_ACCESS_BUFFERABLE;
-> ```
->
+>   ```
+>   
 > .axisram2 是NORMAL最低性能模式，读 Cache 关闭、写 Cache 关闭
 >
 > ```c
->   MPU_InitStruct.Enable = MPU_REGION_ENABLE;
->   MPU_InitStruct.Number = MPU_REGION_NUMBER5;
+>MPU_InitStruct.Enable = MPU_REGION_ENABLE;
+> MPU_InitStruct.Number = MPU_REGION_NUMBER5;
 >   MPU_InitStruct.BaseAddress = 0x24040000;
 >   MPU_InitStruct.Size = MPU_REGION_SIZE_64KB;
 >   MPU_InitStruct.SubRegionDisable = 0;
@@ -53,13 +63,12 @@ main函数中已经复制中断向量表到DTCM
 >   MPU_InitStruct.IsShareable = MPU_ACCESS_NOT_SHAREABLE;
 >   MPU_InitStruct.IsCacheable = MPU_ACCESS_NOT_CACHEABLE;
 >   MPU_InitStruct.IsBufferable = MPU_ACCESS_NOT_BUFFERABLE;
-> ```
->
-> MPU配置参考：[STM32H7视频教程第14期：超干货，MPU和Cache实战，一张图了解所有经典配置案例...](https://www.cnblogs.com/armfly/p/16245867.html)
+>   ```
+>   
 
 USBX 引入了以下变量：
 
-### 不能任意
+#### 不能开启读写 Cache 
 
 以下变量使用排除法一一测试过，放在 axisram1 中不正常，放在 axisram2 中正常
 
@@ -71,7 +80,7 @@ app_azure_rtos.c：\APP\app_azure_rtos.c
 
 - **ux_device_byte_pool_buffer**：usbx字节池，大小取决于配置
 
-### 可任意
+#### 可以开启读写 Cache 
 
 以下变量使用排除法一一测试过，放在 dtcm、axisram1、axisram2 都正常
 
@@ -113,9 +122,9 @@ ux_device_descriptors.c：\USBX\App\ux_device_descriptors.c
 - **USBD_string_framework**：256B
 - **USBD_language_id_framework**：2B
 
-## 修复 BUG：fx_stm32_sd_driver.c 字节对齐
+### 需要修复的 BUG ：fx_stm32_sd_driver.c 字节对齐
 
-### 文字说明
+#### 文字说明
 
 在工程设置里排除 /ST/filex/common/drivers/fx_stm32_sd_driver.c
 
@@ -125,11 +134,11 @@ ux_device_descriptors.c：\USBX\App\ux_device_descriptors.c
   unaligned_buffer = (UINT)(media_ptr->fx_media_driver_buffer) & 0x1f; //!< 0x03 修改为 0x1f
 ```
 
-### 图片示意
+#### 图片示意
 
 ![修复BUG：fx_stm32_sd_driver.c 字节对齐](Images/修复BUG：fx_stm32_sd_driver.c 字节对齐.png)
 
-### 参考
+#### 参考
 
 [CSDN：修改方案（2024-04-24 17:11:17）](https://blog.csdn.net/qq_34446736/article/details/138162909?fromshare=blogdetail&sharetype=blogdetail&sharerId=138162909&sharerefer=PC&sharesource=weixin_44794918&sharefrom=from_link)
 
@@ -148,8 +157,6 @@ ux_device_descriptors.c：\USBX\App\ux_device_descriptors.c
 > 更正：
 >
 > 仅当 fx_media_driver_buffer 为 32 字节对齐且为 32 字节的倍数时，才将 use_scratch_buffer 设置为 false。
-
-
 
 ## 一些思考
 
@@ -170,3 +177,13 @@ ux_device_descriptors.c：\USBX\App\ux_device_descriptors.c
 > 进入启动任务后，初始化各种外设并创建各种通信组件，并且这个启动任务不会被删除，继续作为一个启动任务使用
 
 main函数仅初始化 HAL / 时钟，启动任务初始化外设 / 组件之后这个任务一直休眠，其内存不释放，是 ThreadX 的最佳实践
+
+## Demo
+
+H723ZGTx144_ThreadX_USBX_MSC_01 有的测试都正常，感觉速度没有任何提升
+
+## 内存分析器
+
+| ![Memory_Analyzer：Memory_Regions](Images/Memory_Analyzer：Memory_Regions.png) | ![Memory_Analyzer：Memory_Details](Images/Memory_Analyzer：Memory_Details.png) |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
+
