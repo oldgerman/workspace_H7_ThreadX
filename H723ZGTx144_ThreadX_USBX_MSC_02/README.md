@@ -136,7 +136,7 @@ ux_device_descriptors.c：\USBX\App\ux_device_descriptors.c
 
 #### 图片示意
 
-![修复BUG：fx_stm32_sd_driver.c 字节对齐](Images/修复BUG：fx_stm32_sd_driver.c 字节对齐.png)
+![修复BUG：fx_stm32_sd_driver.c字节对齐](Images/修复BUG：fx_stm32_sd_driver.c字节对齐.png)
 
 #### 参考
 
