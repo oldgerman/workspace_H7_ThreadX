@@ -4,11 +4,9 @@
 
 在 H723ZGTx144_ThreadX_USBX_MSC_01 基础上将主内存从 AXISRAM 切换为 DTCM，
 
-使用 attribute 将放在DTCM中导致不能正常工作的变量放到 .axisram2_bss和 .axisram2_data，MPU不开cache和buffer
+使用 attribute 将放在 DTCM 中导致不能正常工作的变量放到 .axisram2_bss，此片内存 MPU 不开读写 cache
 
-已经修改 .ld 链接脚本文件和 .s启动文件
-
-main函数中已经复制中断向量表到DTCM
+main() 会从片内 FLASH 将中断向量表复制到 DTCM 开始的 1KB 空间
 
 ## 配置
 
@@ -33,7 +31,7 @@ MPU配置参考：[STM32H7视频教程第14期：超干货，MPU和Cache实战�
 
 我将AXISRAM占用了ITCM共享区设为320K，然后在 .ld 链接脚本中，划分为 AXISRAM1 和 AXISRAM2
 
-> .axisram1 是NORMAL最强性能模式，读 Cache 开启、写 Cache 开启
+> .axisram1 是NORMAL最强性能模式，读写 Cache 开启
 >
 > ```c
 >MPU_InitStruct.Enable = MPU_REGION_ENABLE;
@@ -49,7 +47,7 @@ MPU配置参考：[STM32H7视频教程第14期：超干货，MPU和Cache实战�
 >   MPU_InitStruct.IsBufferable = MPU_ACCESS_BUFFERABLE;
 >   ```
 >   
-> .axisram2 是NORMAL最低性能模式，读 Cache 关闭、写 Cache 关闭
+> .axisram2 是NORMAL最低性能模式，读写 Cache 关闭
 >
 > ```c
 >MPU_InitStruct.Enable = MPU_REGION_ENABLE;
