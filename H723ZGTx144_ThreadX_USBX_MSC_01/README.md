@@ -254,6 +254,22 @@ ULONG USBD_STORAGE_GetMediaBlocklength(VOID)
 }
 ```
 
+## 一些思考
+
+### 为什么 ux_device_msc.c 调用 HAL SD DMA 读写函数没有看到解决4字节对齐的代码？
+
+贴子参见：
+
+- [STM32H7的SDIO自带的DMA控制器数据传输的地址是强制4字节对齐，这就非常不方便了](https://forum.anfulai.cn/forum.php?m ... id=94066&fromuid=58)
+- [ST这骚操作，解决H7的SDIO DMA的4字节对齐问题，搞了个复制粘贴](https://forum.anfulai.cn/forum.php?mod=viewthread&tid=100130)
+
+ ux_device_msc.c 中
+
+- USBD_STORAGE_Read() 调用 HAL_SD_ReadBlocks_DMA()
+- USBD_STORAGE_Write() 调用 HAL_SD_WriteBlocks_DMA()
+
+因为 CubeMX 中 USBX 的 UX_ALIGN_MIN 默认是 Align 8，即分配的内存以8字节对齐
+
 ## Demo
 
 可以正常CRUD各种文件，例如打开文本文件，编辑内容后保存、重命名文件等（支持中文）
