@@ -291,8 +291,6 @@ UINT MX_USBX_Device_Init(VOID *memory_ptr)
   }
   /* USER CODE END MX_USBX_Device_Init1 */
 
-  /* USER CODE END MX_USBX_Device_Init1 */
-
   return ret;
 }
 
