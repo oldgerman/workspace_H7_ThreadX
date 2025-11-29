@@ -550,7 +550,7 @@
 
 /* Defined, this value represents the size of the log pool.
 */
-/* #define UX_DEBUG_LOG_SIZE          (1024 * 16) */
+#define UX_DEBUG_LOG_SIZE             4096
 
 /* Defined, this macro represents the non-blocking function to return time tick.
    This macro is used only in standalone mode.

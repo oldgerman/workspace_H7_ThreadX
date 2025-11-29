@@ -81,7 +81,7 @@
    functions to the core functions that actually perform the work.
    Note: error checking is enabled by default.  */
 
-/* #define FX_DISABLE_ERROR_CHECKING */
+#define FX_DISABLE_ERROR_CHECKING
 
 /* Defined, FileX does not update already opened files.  */
 

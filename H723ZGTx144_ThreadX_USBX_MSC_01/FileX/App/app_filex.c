@@ -38,7 +38,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* Main thread stack size */
-#define FX_APP_THREAD_STACK_SIZE         1024
+#define FX_APP_THREAD_STACK_SIZE         4096
 /* Main thread priority */
 #define FX_APP_THREAD_PRIO               10
 
