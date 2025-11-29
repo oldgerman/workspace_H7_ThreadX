@@ -41,46 +41,26 @@ UX_SYSTEM_OTG     *_ux_system_otg;
 /* Define names of all the packed descriptors in USBX.  */
 
 UCHAR _ux_system_endpoint_descriptor_structure[] =                          {1,1,1,1,2,1 };
-
 UCHAR _ux_system_device_descriptor_structure[] =                            {1,1,2,1,1,1,1,2,2,2,1,1,1,1};
-
 UCHAR _ux_system_configuration_descriptor_structure[] =                     {1,1,2,1,1,1,1,1};
-
 UCHAR _ux_system_interface_descriptor_structure[] =                         {1,1,1,1,1,1,1,1,1};
-
 UCHAR _ux_system_interface_association_descriptor_structure[] =             {1,1,1,1,1,1,1,1};
-
 UCHAR _ux_system_string_descriptor_structure[] =                            {1,1,2};
-
 UCHAR _ux_system_dfu_functional_descriptor_structure[] =                    {1,1,1,2,2,2};
-
 UCHAR _ux_system_class_audio_interface_descriptor_structure[] =             {1,1,1,1,1,1,1,1};
-
 UCHAR _ux_system_class_audio_input_terminal_descriptor_structure[] =        {1,1,1,1,2,1,1,2,1,1};
-
 UCHAR _ux_system_class_audio_output_terminal_descriptor_structure[] =       {1,1,1,1,2,1,1,1};
-
 UCHAR _ux_system_class_audio_feature_unit_descriptor_structure[] =          {1,1,1,1,1,1,1};
-
 UCHAR _ux_system_class_audio_streaming_interface_descriptor_structure[] =   {1,1,1,1,1,1};
-
 UCHAR _ux_system_class_audio_streaming_endpoint_descriptor_structure[] =    {1,1,1,1,1,1};
-
 UCHAR _ux_system_hub_descriptor_structure[] =                               {1,1,1,2,1,1,1,1};
-
 UCHAR _ux_system_hid_descriptor_structure[] =                               {1,1,2,1,1,1,2};
-
 UCHAR _ux_system_class_pima_storage_structure[] =                           {2,2,2,4,4,4,4,4};
-
 UCHAR _ux_system_class_pima_object_structure[] =                            {4,2,2,4,2,4,4,4,4,4,4,4,2,4,4};
-
 UCHAR _ux_system_ecm_interface_descriptor_structure[] =                     {1,1,1,1,4,2,2,1};
 
-
 UCHAR _ux_system_bos_descriptor_structure[] =                               {1,1,2,1};
-
 UCHAR _ux_system_usb_2_0_extension_descriptor_structure[] =                 {1,1,1,4};
-
 UCHAR _ux_system_container_id_descriptor_structure[] =                      {1,1,1,1,4,4,4,4};
 
 

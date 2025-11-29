@@ -33,28 +33,17 @@ UX_COMPILE_TIME_ASSERT(!UX_OVERFLOW_CHECK_MULC_ULONG(sizeof(UX_SLAVE_CLASS), UX_
 /* Define the names of all the USB Classes of USBX.  */
 
 UCHAR _ux_system_slave_class_storage_name[] =                               "ux_slave_class_storage";
-
 UCHAR _ux_system_slave_class_cdc_acm_name[] =                               "ux_slave_class_cdc_acm";
-
 UCHAR _ux_system_slave_class_dpump_name[] =                                 "ux_slave_class_dpump";
-
 UCHAR _ux_system_slave_class_pima_name[] =                                  "ux_slave_class_pima";
-
 UCHAR _ux_system_slave_class_hid_name[] =                                   "ux_slave_class_hid";
-
 UCHAR _ux_system_slave_class_rndis_name[] =                                 "ux_slave_class_rndis";
-
 UCHAR _ux_system_slave_class_cdc_ecm_name[] =                               "ux_slave_class_cdc_ecm";
-
 UCHAR _ux_system_slave_class_dfu_name[] =                                   "ux_slave_class_dfu";
-
 UCHAR _ux_system_slave_class_audio_name[] =                                 "ux_slave_class_audio";
 
-
 UCHAR _ux_system_device_class_printer_name[] =                              "ux_device_class_printer";
-
 UCHAR _ux_system_device_class_ccid_name[] =                                 "ux_device_class_ccid";
-
 UCHAR _ux_system_device_class_video_name[] =                                "ux_device_class_video";
 
 /* Define USBX Host variable.  */

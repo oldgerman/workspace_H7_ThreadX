@@ -23,7 +23,7 @@ main函数中已经复制中断向量表到DTCM
 
 > 我将AXISRAM占用了ITCM共享区设为320K，然后在 .ld 链接脚本中，划分为 AXISRAM1 和 AXISRAM2
 >
-> .axisram1 是NORMAL最低性能模式，读 Cache 开启、写 Cache 开启
+> .axisram1 是NORMAL最强性能模式，读 Cache 开启、写 Cache 开启
 >
 > ```c
 >   MPU_InitStruct.Enable = MPU_REGION_ENABLE;
@@ -39,7 +39,7 @@ main函数中已经复制中断向量表到DTCM
 >   MPU_InitStruct.IsBufferable = MPU_ACCESS_BUFFERABLE;
 > ```
 >
-> .axisram2 是NORMAL最强性能模式，读 Cache 关闭、写 Cache 关闭
+> .axisram2 是NORMAL最低性能模式，读 Cache 关闭、写 Cache 关闭
 >
 > ```c
 >   MPU_InitStruct.Enable = MPU_REGION_ENABLE;
@@ -153,3 +153,20 @@ ux_device_descriptors.c：\USBX\App\ux_device_descriptors.c
 
 ## 一些思考
 
+### ThreadX 全部使用静态内存
+
+帖子：[关于threadx 的 内存申请疑惑：7#](https://forum.anfulai.cn/forum.php?mod=redirect&goto=findpost&ptid=126777&pid=324023&fromuid=47676)
+
+### 在 Threadx 内核开启并正常运行后，才进行大部分系统外设的初始化
+
+帖子：[关于threadx 的 内存申请疑惑：3#](https://forum.anfulai.cn/forum.php?mod=redirect&goto=findpost&ptid=126777&pid=323824&fromuid=47676)
+
+硬汉：
+
+> 正确的姿势就是这样的，我们新作的例子全部采用这种思路了。可以方便排查OS本身的启动问题和底层驱动的初始化问题。都放在main函数里面排查不方便
+>
+> main函数里面什么外设初始化都不做，仅仅是初始化HAL库和系统时钟并创建启动任务。
+>
+> 进入启动任务后，初始化各种外设并创建各种通信组件，并且这个启动任务不会被删除，继续作为一个启动任务使用
+
+main函数仅初始化 HAL / 时钟，启动任务初始化外设 / 组件之后这个任务一直休眠，其内存不释放，是 ThreadX 的最佳实践

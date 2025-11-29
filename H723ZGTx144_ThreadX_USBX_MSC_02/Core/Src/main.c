@@ -48,6 +48,9 @@
 
 /* USER CODE BEGIN PV */
 HAL_SD_CardInfoTypeDef                     USBD_SD_CardInfo;
+
+// DTCM 前 0x400 空间用于存放从 FLASH 拷贝的中断向量表副本
+__attribute__((section(".dtcmvtor_nold"), aligned(4))) uint8_t dtcm_isr_vector[1024];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -87,7 +90,7 @@ int main(void)
 #else
 	uint32_t *SouceAddr = (uint32_t *)FLASH_BANK1_BASE;
 #endif
-	uint32_t *DestAddr = (uint32_t *)D1_DTCMRAM_BASE;
+	uint32_t *DestAddr = (uint32_t *)dtcm_isr_vector;
 
 	/**
 	 * memcpy 拷贝大小 0x400，即1KB，因为通过构建分析器查看 .isr_vector 大小为 716B，留有一定余量
@@ -269,7 +272,6 @@ void MPU_Config(void)
   MPU_InitStruct.SubRegionDisable = 0x0;
   MPU_InitStruct.TypeExtField = MPU_TEX_LEVEL0;
   MPU_InitStruct.IsCacheable = MPU_ACCESS_NOT_CACHEABLE;
-  MPU_InitStruct.IsBufferable = MPU_ACCESS_BUFFERABLE;
 
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
 
@@ -300,18 +302,13 @@ void MPU_Config(void)
 
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
 
-  /** AXISRAM 顶部额外不缓存区域 */
-  MPU_InitStruct.Enable = MPU_REGION_ENABLE;
-  MPU_InitStruct.Number = MPU_REGION_NUMBER5; // 5号优先级大于0号
+  /** Initializes and configures the Region and the memory to be protected
+  */
+  MPU_InitStruct.Number = MPU_REGION_NUMBER5;
   MPU_InitStruct.BaseAddress = 0x24040000;
   MPU_InitStruct.Size = MPU_REGION_SIZE_64KB;
-  MPU_InitStruct.SubRegionDisable = 0;
   MPU_InitStruct.TypeExtField = MPU_TEX_LEVEL1;
-  MPU_InitStruct.AccessPermission = MPU_REGION_FULL_ACCESS;
-  MPU_InitStruct.DisableExec = MPU_INSTRUCTION_ACCESS_ENABLE;
-  MPU_InitStruct.IsShareable = MPU_ACCESS_NOT_SHAREABLE;
   MPU_InitStruct.IsCacheable = MPU_ACCESS_NOT_CACHEABLE;
-  MPU_InitStruct.IsBufferable = MPU_ACCESS_NOT_BUFFERABLE;
 
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
   /* Enables the MPU */

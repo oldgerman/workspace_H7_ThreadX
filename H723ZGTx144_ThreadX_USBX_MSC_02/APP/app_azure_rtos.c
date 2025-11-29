@@ -54,10 +54,12 @@
 #if defined ( __ICCARM__ )
 #pragma data_alignment=4
 #endif
-// __attribute__((section(".axisram2_data"), aligned(4), used))
-//__ALIGN_BEGIN static UCHAR tx_byte_pool_buffer[TX_APP_MEM_POOL_SIZE] __ALIGN_END;
+#if 0
+__ALIGN_BEGIN static UCHAR tx_byte_pool_buffer[TX_APP_MEM_POOL_SIZE] __ALIGN_END;
+#else
 __attribute__((section(".axisram1_bss"), aligned(4)))
 static UCHAR tx_byte_pool_buffer[TX_APP_MEM_POOL_SIZE]; //!< 位置可以放到DTCM
+#endif
 static TX_BYTE_POOL tx_app_byte_pool;
 
 /* USER CODE BEGIN FX_Pool_Buffer */
@@ -65,9 +67,12 @@ static TX_BYTE_POOL tx_app_byte_pool;
 #if defined ( __ICCARM__ )
 #pragma data_alignment=4
 #endif
-//__ALIGN_BEGIN static UCHAR fx_byte_pool_buffer[FX_APP_MEM_POOL_SIZE] __ALIGN_END;
+#if 0
+__ALIGN_BEGIN static UCHAR fx_byte_pool_buffer[FX_APP_MEM_POOL_SIZE] __ALIGN_END;
+#else
 __attribute__((section(".axisram1_bss"), aligned(4)))
 static UCHAR fx_byte_pool_buffer[FX_APP_MEM_POOL_SIZE]; //!< 位置可以放到DTCM
+#endif
 static TX_BYTE_POOL fx_app_byte_pool;
 
 /* USER CODE BEGIN UX_Device_Pool_Buffer */
@@ -75,9 +80,12 @@ static TX_BYTE_POOL fx_app_byte_pool;
 #if defined ( __ICCARM__ )
 #pragma data_alignment=4
 #endif
-//__ALIGN_BEGIN static UCHAR ux_device_byte_pool_buffer[UX_DEVICE_APP_MEM_POOL_SIZE] __ALIGN_END;
-__attribute__((section(".axisram2_bss"), aligned(4)))
+#if 0
+__ALIGN_BEGIN static UCHAR ux_device_byte_pool_buffer[UX_DEVICE_APP_MEM_POOL_SIZE] __ALIGN_END;
+#else
+__attribute__((section(".axisram2_bss"), aligned(4))) //!< 位置是 NORMAL最低性能模式，读 Cache 关闭、写 Cache 关闭
 static UCHAR ux_device_byte_pool_buffer[UX_DEVICE_APP_MEM_POOL_SIZE];
+#endif
 static TX_BYTE_POOL ux_device_app_byte_pool;
 
 #endif

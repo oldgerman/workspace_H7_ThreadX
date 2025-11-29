@@ -57,10 +57,7 @@ TX_THREAD       fx_app_thread;
 
 /* Buffer for FileX FX_MEDIA sector cache. */
 ALIGN_32BYTES (uint32_t fx_sd_media_memory[FX_STM32_SD_DEFAULT_SECTOR_SIZE / sizeof(uint32_t)]);
-//__attribute__((section(".axisram2_bss"), aligned(32)))
-//uint32_t fx_sd_media_memory[FX_STM32_SD_DEFAULT_SECTOR_SIZE / sizeof(uint32_t)];
 /* Define FileX global data structures.  */
-//__attribute__((section(".axisram1_bss"), aligned(4)))
 FX_MEDIA        sdio_disk;
 
 /* USER CODE BEGIN PV */

@@ -361,6 +361,14 @@ SECTIONS
 /* No Load RAM Sections Begin ---------------------------------------------------*/
 /* 此范围的段不从FLASH加载，且启动文件中不进行全0填充 */
   /* dtcmram_nold */
+  .dtcmvtor_nold (NOLOAD):
+  {
+    . = ALIGN(4);
+    *(.dtcmvtor_nold)
+    . = ALIGN(4);
+  } >DTCMVTOR
+  
+  /* dtcmram_nold */
   .dtcmram_nold (NOLOAD):
   {
     . = ALIGN(4);
