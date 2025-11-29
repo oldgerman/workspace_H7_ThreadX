@@ -178,6 +178,105 @@ ux_device_descriptors.c：\USBX\App\ux_device_descriptors.c
 
 main函数仅初始化 HAL / 时钟，启动任务初始化外设 / 组件之后这个任务一直休眠，其内存不释放，是 ThreadX 的最佳实践
 
+### ux_device_msc.c 中的 HAL SD DMA 读写函数不需要调用缓存维护API
+
+USBD_STORAGE_Read() 和 USBD_STORAGE_Write() 函数不需要缓存维护API，HAL SD DMA 读写函数访问的是 AXISRAM2 区域
+
+```c
+UINT USBD_STORAGE_Read(VOID *storage_instance, ULONG lun, UCHAR *data_pointer,
+                       ULONG number_blocks, ULONG lba, ULONG *media_status)
+{
+  UINT status = UX_SUCCESS;
+
+  /* USER CODE BEGIN USBD_STORAGE_Read */
+  UX_PARAMETER_NOT_USED(storage_instance);
+  UX_PARAMETER_NOT_USED(lun);
+  UX_PARAMETER_NOT_USED(media_status);
+
+  ULONG ReadFlags = 0U;
+
+  /* Check if the SD card is present */
+//  if (HAL_GPIO_ReadPin(GPIOF, GPIO_PIN_5) != GPIO_PIN_RESET)
+//  {
+    /* Check id SD card is ready */
+    if(check_sd_status() != HAL_OK)
+    {
+      _Error_Handler(__FILE__, __LINE__);
+    }
+
+    /* Start the Dma write */
+    status =  HAL_SD_ReadBlocks_DMA(&hsd2, data_pointer, lba, number_blocks);
+    if(status != HAL_OK)
+    {
+      _Error_Handler(__FILE__, __LINE__);
+    }
+
+// 不需要缓存维护API，访问的是AXISRAM2区域
+//#if (FX_STM32_SD_CACHE_MAINTENANCE == 1)
+//    invalidate_cache_by_addr((uint32_t*)data_pointer, number_blocks * FX_STM32_SD_DEFAULT_SECTOR_SIZE);
+//#endif
+
+    /* Wait on readflag until SD card is ready to use for new operation */
+    if (tx_event_flags_get(&EventFlag, SD_READ_FLAG, TX_OR_CLEAR,
+                           &ReadFlags, TX_WAIT_FOREVER) != TX_SUCCESS)
+    {
+      _Error_Handler(__FILE__, __LINE__);
+    }
+//  }
+
+  /* USER CODE END USBD_STORAGE_Read */
+
+  return status;
+}
+
+UINT USBD_STORAGE_Write(VOID *storage_instance, ULONG lun, UCHAR *data_pointer,
+                        ULONG number_blocks, ULONG lba, ULONG *media_status)
+{
+  UINT status = UX_SUCCESS;
+
+  /* USER CODE BEGIN USBD_STORAGE_Write */
+  UX_PARAMETER_NOT_USED(storage_instance);
+  UX_PARAMETER_NOT_USED(lun);
+  UX_PARAMETER_NOT_USED(media_status);
+
+  ULONG WriteFlags = 0U;
+
+  /* Check if the SD card is present */
+//  if (HAL_GPIO_ReadPin(GPIOF, GPIO_PIN_5) != GPIO_PIN_RESET)
+//  {
+    /* Check if SD card is ready */
+    if(check_sd_status() != HAL_OK)
+    {
+      _Error_Handler(__FILE__, __LINE__);
+    }
+
+// 不需要缓存维护API，访问的是AXISRAM2区域
+//#if (FX_STM32_SD_CACHE_MAINTENANCE == 1)
+//    clean_cache_by_addr((uint32_t*)data_pointer, number_blocks * FX_STM32_SD_DEFAULT_SECTOR_SIZE);
+//#endif
+
+    /* Start the Dma write */
+    status = HAL_SD_WriteBlocks_DMA(&hsd2, data_pointer, lba, number_blocks);
+
+    if(status != HAL_OK)
+    {
+      _Error_Handler(__FILE__, __LINE__);
+    }
+
+    /* Wait on writeflag until SD card is ready to use for new operation */
+    if (tx_event_flags_get(&EventFlag, SD_WRITE_FLAG, TX_OR_CLEAR,
+                           &WriteFlags, TX_WAIT_FOREVER) != TX_SUCCESS)
+    {
+      _Error_Handler(__FILE__, __LINE__);
+    }
+//  }
+
+  /* USER CODE END USBD_STORAGE_Write */
+
+  return status;
+}
+```
+
 ## Demo
 
 H723ZGTx144_ThreadX_USBX_MSC_01 有的测试都正常，感觉读写速度没有任何提升
@@ -185,9 +284,13 @@ H723ZGTx144_ThreadX_USBX_MSC_01 有的测试都正常，感觉读写速度没有
 | ![Demo：U盘剪切文件到电脑](Images/Demo：U盘剪切文件到电脑.png) | ![Demo：电脑剪切文件到U盘](Images/Demo：电脑剪切文件到U盘.png) |
 | ------------------------------------------------------------ | ------------------------------------------------------------ |
 | U盘剪切文件到电脑                                            | 电脑剪切文件到U盘                                            |
+| ![Demo：U盘拷贝文件到U盘](Images/Demo：U盘拷贝文件到U盘.png) |                                                              |
+| U盘拷贝文件到U盘                                             |                                                              |
 
 ## 内存分析器
 
 | ![Memory_Analyzer：Memory_Regions](Images/Memory_Analyzer：Memory_Regions.png) | ![Memory_Analyzer：Memory_Details](Images/Memory_Analyzer：Memory_Details.png) |
 | ------------------------------------------------------------ | ------------------------------------------------------------ |
+
+
 

@@ -136,9 +136,12 @@ UINT USBD_STORAGE_Read(VOID *storage_instance, ULONG lun, UCHAR *data_pointer,
     {
       _Error_Handler(__FILE__, __LINE__);
     }
-#if (FX_STM32_SD_CACHE_MAINTENANCE == 1)
-    invalidate_cache_by_addr((uint32_t*)data_pointer, number_blocks * FX_STM32_SD_DEFAULT_SECTOR_SIZE);
-#endif
+
+// 不需要缓存维护API，访问的是AXISRAM2区域
+//#if (FX_STM32_SD_CACHE_MAINTENANCE == 1)
+//    invalidate_cache_by_addr((uint32_t*)data_pointer, number_blocks * FX_STM32_SD_DEFAULT_SECTOR_SIZE);
+//#endif
+
     /* Wait on readflag until SD card is ready to use for new operation */
     if (tx_event_flags_get(&EventFlag, SD_READ_FLAG, TX_OR_CLEAR,
                            &ReadFlags, TX_WAIT_FOREVER) != TX_SUCCESS)
@@ -185,9 +188,10 @@ UINT USBD_STORAGE_Write(VOID *storage_instance, ULONG lun, UCHAR *data_pointer,
       _Error_Handler(__FILE__, __LINE__);
     }
 
-#if (FX_STM32_SD_CACHE_MAINTENANCE == 1)
-    clean_cache_by_addr((uint32_t*)data_pointer, number_blocks * FX_STM32_SD_DEFAULT_SECTOR_SIZE);
-#endif
+// 不需要缓存维护API，访问的是AXISRAM2区域
+//#if (FX_STM32_SD_CACHE_MAINTENANCE == 1)
+//    clean_cache_by_addr((uint32_t*)data_pointer, number_blocks * FX_STM32_SD_DEFAULT_SECTOR_SIZE);
+//#endif
 
     /* Start the Dma write */
     status = HAL_SD_WriteBlocks_DMA(&hsd2, data_pointer, lba, number_blocks);
