@@ -298,7 +298,7 @@ ULONG USBD_STORAGE_GetMediaLastLba(VOID)
   /* USER CODE BEGIN USBD_STORAGE_GetMediaLastLba */
 #if 1
   LastLba = (ULONG)(USBD_SD_CardInfo.BlockNbr - 1);
-#else
+#else // 等价写法
   LastLba = (ULONG)(hsd2.SdCard.BlockNbr -1);
 #endif
   /* USER CODE END USBD_STORAGE_GetMediaLastLba */
@@ -319,7 +319,7 @@ ULONG USBD_STORAGE_GetMediaBlocklength(VOID)
   /* USER CODE BEGIN USBD_STORAGE_GetMediaBlocklength */
 #if 1
   MediaBlockLen = (ULONG) USBD_SD_CardInfo.BlockSize;
-#else
+#else // 等价写法
   MediaBlockLen = (ULONG) hsd2.SdCard.BlockSize;
 #endif
   /* USER CODE END USBD_STORAGE_GetMediaBlocklength */
