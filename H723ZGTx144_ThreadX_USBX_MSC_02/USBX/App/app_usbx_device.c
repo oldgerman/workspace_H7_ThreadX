@@ -50,7 +50,7 @@
 
 static ULONG storage_interface_number;
 static ULONG storage_configuration_number;
-__attribute__((section(".axisram2_bss"), aligned(4)))
+//__attribute__((section(".axisram2_bss"), aligned(4)))
 static UX_SLAVE_CLASS_STORAGE_PARAMETER storage_parameter;
 static TX_THREAD ux_device_app_thread;
 

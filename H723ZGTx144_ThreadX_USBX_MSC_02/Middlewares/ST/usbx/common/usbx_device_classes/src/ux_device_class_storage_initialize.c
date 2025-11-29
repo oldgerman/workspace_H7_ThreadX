@@ -30,13 +30,13 @@
 #include "ux_device_stack.h"
 
 /* Define the Slave Storage Class Inquiry data : DO NOT CHANGE THE LENGTH OF THESE ITEMS */
-__attribute__((section(".axisram2_data"), aligned(4), used))
+
 UCHAR _ux_system_slave_class_storage_vendor_id[] =                          "AzureRTO";
-__attribute__((section(".axisram2_data"), aligned(4), used))
+
 UCHAR _ux_system_slave_class_storage_product_id[] =                         "USBX storage dev";
-__attribute__((section(".axisram2_data"), aligned(4), used))
+
 UCHAR _ux_system_slave_class_storage_product_rev[] =                        "2000";
-__attribute__((section(".axisram2_data"), aligned(4), used))
+
 UCHAR _ux_system_slave_class_storage_product_serial[] =                     "12345678901234567890";
 
 /**************************************************************************/

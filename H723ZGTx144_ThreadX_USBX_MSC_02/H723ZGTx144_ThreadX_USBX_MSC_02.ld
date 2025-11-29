@@ -46,12 +46,12 @@ MEMORY
   ITCMRAM  (xrw)   : ORIGIN = 0x00000000,   LENGTH = 64K    /* RAM_ITCM  */
   DTCMVTOR (xrw)   : ORIGIN = 0x20000000,   LENGTH = 1K     /* VTOR_DTCM */
   DTCMRAM  (xrw)   : ORIGIN = 0x20000400,   LENGTH = 127K   /* RAM_DTCM  */
-  AXISRAM1  (xrw)  : ORIGIN = 0x24000000,   LENGTH = 256K   /* RAM_D1    */
+  AXISRAM1 (xrw)   : ORIGIN = 0x24000000,   LENGTH = 256K   /* RAM_D1    */
   AXISRAM2 (xrw)   : ORIGIN = 0x24040000,   LENGTH = 64K    /* RAM_D1    */
   SRAM1    (xrw)   : ORIGIN = 0x30000000,   LENGTH = 16K    /* RAM_D2    */
   SRAM2    (xrw)   : ORIGIN = 0x30004000,   LENGTH = 16K    /* RAM_D2    */
   SRAM4    (xrw)   : ORIGIN = 0x38000000,   LENGTH = 16K    /* RAM_D3    */
-  BKPRAM   (rw)    : ORIGIN = 0x38800000,   LENGTH = 4K      /* RAM_D3    */
+  BKPRAM   (xrw)   : ORIGIN = 0x38800000,   LENGTH = 4K     /* RAM_D3    */
   PSRAM    (xrw)   : ORIGIN = 0x90000000,   LENGTH = 64M    /* RAM_PSRAM */
   FLASH    (rx)    : ORIGIN = 0x08000000,   LENGTH = 1024K  /* ROM_FLASH */
 }

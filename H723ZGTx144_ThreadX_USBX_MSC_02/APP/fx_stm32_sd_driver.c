@@ -79,12 +79,12 @@ VOID  fx_stm32_sd_driver(FX_MEDIA *media_ptr)
   /* the SD DMA requires a 4-byte aligned buffers */
   /**
    * @Attention:
-   * CSDN：修改方案（2024-04-24 17:11:17）：https://blog.csdn.net/qq_34446736/article/details/138162909?ops_request_misc=elastic_search_misc&request_id=0607850450921201850566dfc7f1a6fc&biz_id=0&utm_medium=distribute.pc_search_result.none-task-blog-2~all~ElasticSearch~search_v2-1-138162909-null-null.142^v102^pc_search_result_base6&utm_term=STM32H7%E4%BD%BF%E7%94%A8FileX%E5%BA%93BUG%EF%BC%8CSD%E5%8D%A1%E6%8C%82%E8%BD%BD%E5%A4%B1%E8%B4%A5&spm=1018.2226.3001.4187
-   * ST论坛报错(2025年11月21日 上午4:38)： https://community.st.com/t5/stm32-mcus-embedded-software/bug-in-fx-stm32-sd-driver-c/td-p/858270
+   * CSDN：修改方案（2024-04-24 17:11:17）：https://blog.csdn.net/qq_34446736/article/details/138162909?fromshare=blogdetail&sharetype=blogdetail&sharerId=138162909&sharerefer=PC&sharesource=weixin_44794918&sharefrom=from_link
+   * ST：论坛报错（2025年11月21日 上午4:38）：https://community.st.com/t5/stm32-mcus-embedded-software/bug-in-fx-stm32-sd-driver-c/td-p/858270
    * SCB_InvalidateDCache_by_Addr() 要求传入的地址为32字节对齐，因为Cortex-M7内核的Cache line大小为8个字。
    * 当传入的地址为4字节对齐非32字节对齐时，SCB_InvalidateDCache_by_Addr()调用传入的参数不符合要求，D-Cache缓存清除错误，使CPU读取到缓存中错误的值。
    */
-  unaligned_buffer = (UINT)(media_ptr->fx_media_driver_buffer) & 0x1f;
+  unaligned_buffer = (UINT)(media_ptr->fx_media_driver_buffer) & 0x1f; //!< 0x03 修改为 0x1f
 #else
   /* if the DMA is not used there isn't any constraint on buffer alignment */
   unaligned_buffer = 0;

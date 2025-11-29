@@ -31,30 +31,30 @@
 UX_COMPILE_TIME_ASSERT(!UX_OVERFLOW_CHECK_MULC_ULONG(sizeof(UX_SLAVE_CLASS), UX_MAX_SLAVE_CLASS_DRIVER), UX_MAX_SLAVE_CLASS_DRIVER_mul_ovf)
 
 /* Define the names of all the USB Classes of USBX.  */
-__attribute__((section(".axisram2_data"), aligned(4), used))
+
 UCHAR _ux_system_slave_class_storage_name[] =                               "ux_slave_class_storage";
-__attribute__((section(".axisram2_data"), aligned(4), used))
+
 UCHAR _ux_system_slave_class_cdc_acm_name[] =                               "ux_slave_class_cdc_acm";
-__attribute__((section(".axisram2_data"), aligned(4), used))
+
 UCHAR _ux_system_slave_class_dpump_name[] =                                 "ux_slave_class_dpump";
-__attribute__((section(".axisram2_data"), aligned(4), used))
+
 UCHAR _ux_system_slave_class_pima_name[] =                                  "ux_slave_class_pima";
-__attribute__((section(".axisram2_data"), aligned(4), used))
+
 UCHAR _ux_system_slave_class_hid_name[] =                                   "ux_slave_class_hid";
-__attribute__((section(".axisram2_data"), aligned(4), used))
+
 UCHAR _ux_system_slave_class_rndis_name[] =                                 "ux_slave_class_rndis";
-__attribute__((section(".axisram2_data"), aligned(4), used))
+
 UCHAR _ux_system_slave_class_cdc_ecm_name[] =                               "ux_slave_class_cdc_ecm";
-__attribute__((section(".axisram2_data"), aligned(4), used))
+
 UCHAR _ux_system_slave_class_dfu_name[] =                                   "ux_slave_class_dfu";
-__attribute__((section(".axisram2_data"), aligned(4), used))
+
 UCHAR _ux_system_slave_class_audio_name[] =                                 "ux_slave_class_audio";
 
-__attribute__((section(".axisram2_data"), aligned(4), used))
+
 UCHAR _ux_system_device_class_printer_name[] =                              "ux_device_class_printer";
-__attribute__((section(".axisram2_data"), aligned(4), used))
+
 UCHAR _ux_system_device_class_ccid_name[] =                                 "ux_device_class_ccid";
-__attribute__((section(".axisram2_data"), aligned(4), used))
+
 UCHAR _ux_system_device_class_video_name[] =                                "ux_device_class_video";
 
 /* Define USBX Host variable.  */

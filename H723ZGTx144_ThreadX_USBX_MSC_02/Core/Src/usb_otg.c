@@ -22,8 +22,10 @@
 
 /* USER CODE BEGIN 0 */
 void USB_Status_Init(void);
+__attribute__((section(".axisram2_bss"), aligned(4))) //!< 给下面的 hpcd_USB_OTG_HS 用
+
 /* USER CODE END 0 */
-__attribute__((section(".axisram2_bss"), aligned(4)))
+
 PCD_HandleTypeDef hpcd_USB_OTG_HS;
 
 /* USB_OTG_HS init function */
