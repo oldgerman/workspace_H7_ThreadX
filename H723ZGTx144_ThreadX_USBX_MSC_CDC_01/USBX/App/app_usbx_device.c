@@ -61,6 +61,7 @@ TX_EVENT_FLAGS_GROUP EventFlag;       //!< MSC 使用的事件标志组
 static TX_THREAD ux_cdc_read_thread;
 static TX_THREAD ux_cdc_write_thread;
 TX_EVENT_FLAGS_GROUP EventFlagCDC;    //!< CDC 使用的事件标志组
+//static UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER cdc_acm_callback_parameter; //!< 参数绑定 CDC ACM 回调函数
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -180,7 +181,7 @@ UINT MX_USBX_Device_Init(VOID *memory_ptr)
     ux_slave_class_storage_media_notification = USBD_STORAGE_Notification;
 
   /* USER CODE BEGIN STORAGE_PARAMETER */
-
+  // 用户自定义MSC类的参数绑定代码
   /* USER CODE END STORAGE_PARAMETER */
 
   /* Get storage configuration number */
@@ -207,7 +208,7 @@ UINT MX_USBX_Device_Init(VOID *memory_ptr)
   cdc_acm_parameter.ux_slave_class_cdc_acm_parameter_change    = USBD_CDC_ACM_ParameterChange;
 
   /* USER CODE BEGIN CDC_ACM_PARAMETER */
-
+  // 用户自定义CDC类的参数绑定代码
   /* USER CODE END CDC_ACM_PARAMETER */
 
   /* Get cdc acm configuration number */
@@ -329,40 +330,42 @@ VOID USBX_APP_Device_Init(VOID)
 
   /* USER CODE BEGIN USB_Device_Init_PreTreatment_1 */
 
-  /* USB FIFO 配置，当前总大小 3400Byte */
-  // 开启USB DMA后，FIFO 要留有余量
-  // https://forum.anfulai.cn/forum.php?mod=viewthread&tid=109916&highlight=USB%2BHS
-  // 默认0x200参数过大，但修改为0x80小了也无响应，
-  // 修改为0x180后DMA传输正常，1000个获取浮点数都能相应
-  // 每个FiFo需要分配24Btye DMA 描述符，三个FiFo需要72Byte，
-  // 则能分配收发缓冲区最大为4096-72=4024Byte
-  //
+  /**
+   * USB FIFO 配置
+   *   最大FIFO合计容量 0x1000 字，当前大小合计：0x412 字
+   * 开启USB DMA后，FIFO 要留有余量
+   *   https://forum.anfulai.cn/forum.php?mod=viewthread&tid=109916&highlight=USB%2BHS
+   *   默认0x200参数过大，但修改为0x80小了也无响应，
+   *   修改为0x180后DMA传输正常，1000个获取浮点数都能相应
+   *   每个FIFO需要分配 24Btye DMA 描述符，三个FiFo需要72Byte，
+   *   则能分配收发缓冲区最大为4096-72=4024Byte
+   *
+   * 通过CubeMX生成的宏配置端点FIFO大小：https://community.st.com/t5/stm32-mcus-products/nucleo-u5a5zj-q-usb-cdc-acm-issue-with-ux-device-class-cdc-acm/td-p/632086
+   */
   // MSC 端点 FIFO 配置参考：案例 3：大容量存储：https://community.st.com/t5/stm32-mcus/practical-use-cases-to-manage-fifo-in-usb-otg-controllers-in/ta-p/839963
   /* Set Rx FIFO to accommodate 512 words*/
-  HAL_PCDEx_SetRxFiFo(&hpcd_USB_OTG_HS, 0x200);   //!< RX FIFO 大小： 200 字
+  HAL_PCDEx_SetRxFiFo(&hpcd_USB_OTG_HS, 0x200);                             //!<           大小：0x200 字：RX FIFO
 
   /* Set Tx FIFO 0 size to 16 words (64 bytes) for Control IN endpoint (EP0). */
-  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 0, 0x10); //!< 端点号0：CDC ACM CMD FIFO 大小：10 字
+  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 0, USBD_MAX_EP0_SIZE / 4);          //!< 端点号0 ：大小：0x10  字：IN 控制端点 FIFO
   
   /* Set Tx FIFO 1 to 256 words (1KB) for Bulk IN endpoint */
-  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 1, 0x100); //!< 端点号2：CDC ACM CMD FIFO 大小： 100 字
+  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 1, USBD_MSC_EPIN_HS_MPS / 4);       //!< 端点号1 ：大小：0x100 字：MSC_ENDPOINT_IN / OUT FIFO
 
-  // CDC ACM 端点 FIFO配置参考：x-cube-azrtos-h7-main\Projects\NUCLEO-H723ZG\Applications\USBX\Ux_Device_CDC_ACM\USBX\App\app_usbx_device.c
+  // CDC ACM 端点 FIFO 配置参考：https://github.com/STMicroelectronics/x-cube-azrtos-h7/blob/main/Projects/NUCLEO-H723ZG/Applications/USBX/Ux_Device_CDC_ACM/USBX/App/app_usbx_device.c
   /* Set Tx FIFO 2 */
-  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 2, 0x80); //!< 端点号2：CDC ACM CMD FIFO 大小：10 字
+  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 2, USBD_CDCACM_EPINCMD_HS_MPS / 4); //!< 端点号2： 大小：0x2   字：CDC ACM CMD FIFO
 
   /* Set Tx FIFO 3 */
-  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 3, 0x40); //!< 端点号3：CDC ACM BULK FIFO 大小：20 字
+  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 3, USBD_CDCACM_EPIN_HS_MPS / 4);    //!< 端点号3： 大小：0x100 字：CDC ACM BULK FIFO
+
+
   /* USER CODE END USB_Device_Init_PreTreatment_1 */
 
   /* Initialize and link controller HAL driver */
   // 注册STM32 HS 到USBX协议栈并初始化
-  UINT status;
-  status = ux_dcd_stm32_initialize((ULONG)USB_OTG_HS, (ULONG)&hpcd_USB_OTG_HS);
-//  if (status != UX_SUCCESS)
-//  {
-//    Error_Handler();
-//  }
+  ux_dcd_stm32_initialize((ULONG)USB_OTG_HS, (ULONG)&hpcd_USB_OTG_HS);
+
   /* Start USB device */
   HAL_PCD_Start(&hpcd_USB_OTG_HS);
 

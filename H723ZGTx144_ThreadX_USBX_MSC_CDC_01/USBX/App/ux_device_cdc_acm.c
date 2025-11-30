@@ -285,6 +285,7 @@ VOID usbx_cdc_acm_read_thread_entry(ULONG thread_input)
   UX_SLAVE_DEVICE *device;
 
   UX_PARAMETER_NOT_USED(thread_input);
+  UX_PARAMETER_NOT_USED(senddataflag);
 
   device = &_ux_system_slave->ux_system_slave_device;
 
@@ -381,8 +382,12 @@ VOID usbx_cdc_acm_write_thread_entry(ULONG thread_input)
       buffptr = UserTxBufPtrOut;
 
       /* Send data over the class cdc_acm_write */
+      /* 阻塞式发送 */
       if (ux_device_class_cdc_acm_write(cdc_acm, (UCHAR *)(&UserTxBufferFS[buffptr]),
                                         buffsize, &actual_length) == UX_SUCCESS)
+      /* 非阻塞式发送*/
+//      if (ux_device_class_cdc_acm_write_with_callback(cdc_acm, (UCHAR *)(&UserTxBufferFS[buffptr]),
+//                                        buffsize, &actual_length) == UX_SUCCESS)
       {
         /* Increment the UserTxBufPtrOut pointer */
         UserTxBufPtrOut += buffsize;
