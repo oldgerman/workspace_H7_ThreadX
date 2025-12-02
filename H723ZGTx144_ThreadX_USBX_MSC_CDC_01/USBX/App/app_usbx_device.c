@@ -57,19 +57,26 @@ static UX_SLAVE_CLASS_CDC_ACM_PARAMETER cdc_acm_parameter;
 static TX_THREAD ux_device_app_thread;
 
 /* USER CODE BEGIN PV */
-TX_EVENT_FLAGS_GROUP EventFlag;       //!< MSC 使用的事件标志组
-static TX_THREAD ux_cdc_read_thread;
-static TX_THREAD ux_cdc_write_thread;
-TX_EVENT_FLAGS_GROUP EventFlagCDC;    //!< CDC 使用的事件标志组
-//static UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER cdc_acm_callback_parameter; //!< 参数绑定 CDC ACM 回调函数
+/* 事件标志组 */
+TX_EVENT_FLAGS_GROUP EventFlagMsc;         //!< MSC     事件标志组
+TX_EVENT_FLAGS_GROUP EventFlagCdcAcm;      //!< CDC ACM 事件标志组
+/* 线程控制块 */
+//static TX_THREAD ux_cdc_acm_read_thread;  //!< CDC ACM 接收线程控制块
+//static TX_THREAD ux_cdc_acm_write_thread; //!< CDC ACM 发送线程控制块
+static TX_THREAD ux_cdc_acm_thread;        //!< CDC ACM 线程控制块
+static TX_THREAD ux_cdc_acm_test_thread;   //!< CDC ACM 测试线程控制块
+// 添加队列存储区定义（根据需求调整长度）
+#define USB_RECEIVE_QUEUE_LENGTH 8  // 队列可存储的消息数量（每个消息是ULONG类型）
+ULONG g_usb_queue_storage[USB_RECEIVE_QUEUE_LENGTH];  // 队列存储区（必须全局/静态）
+/* 参数绑定 */
+UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER cdc_acm_callback_parameter; //!< 参数绑定 CDC ACM 回调函数
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 static VOID app_ux_device_thread_entry(ULONG thread_input);
 /* USER CODE BEGIN PFP */
-static VOID app_ux_device_thread_entry(ULONG thread_input);
-extern VOID usbx_cdc_acm_write_thread_entry(ULONG thread_input);
-extern VOID usbx_cdc_acm_read_thread_entry(ULONG thread_input);
+
 /* USER CODE END PFP */
 
 /**
@@ -208,7 +215,18 @@ UINT MX_USBX_Device_Init(VOID *memory_ptr)
   cdc_acm_parameter.ux_slave_class_cdc_acm_parameter_change    = USBD_CDC_ACM_ParameterChange;
 
   /* USER CODE BEGIN CDC_ACM_PARAMETER */
-  // 用户自定义CDC类的参数绑定代码
+  /* 用户自定义CDC类的参数绑定代码 */
+
+  // 绑定 USB CDC ACM 收发中断回调函数
+  cdc_acm_callback_parameter.ux_device_class_cdc_acm_parameter_read_callback = USBD_CDC_ACM_Read_Callback;
+  cdc_acm_callback_parameter.ux_device_class_cdc_acm_parameter_write_callback = USBD_CDC_ACM_Write_Callback;
+
+  /* ux_device_class_cdc_acm_ioctl(cdc_acm, UX_SLAVE_CLASS_CDC_ACM_IOCTL_TRANSMISSION_START, &cdc_acm_callback_parameter);
+   * ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^~~~~~~
+   * 这之后，需要执行启动带回调的传输功能 IOCTL 命令，需在 USBD_CDC_ACM_Activate() 中执行，
+   * 因为当 USB 设备枚举完成，由 USBX 调用激活回调函数 USBD_CDC_ACM_Activate() 时， cdc_acm 实例才创建并初始化
+   */
+
   /* USER CODE END CDC_ACM_PARAMETER */
 
   /* Get cdc acm configuration number */
@@ -251,6 +269,7 @@ UINT MX_USBX_Device_Init(VOID *memory_ptr)
 
   /* USER CODE BEGIN MX_USBX_Device_Init1 */
 
+#if 0
   /* Allocate the stack for usbx cdc acm read thread */
   if (tx_byte_allocate(byte_pool, (VOID **) &pointer, UX_DEVICE_APP_THREAD_STACK_SIZE, TX_NO_WAIT) != TX_SUCCESS)
   {
@@ -258,7 +277,7 @@ UINT MX_USBX_Device_Init(VOID *memory_ptr)
   }
 
   /* Create the usbx cdc acm read thread */
-  if (tx_thread_create(&ux_cdc_read_thread, "cdc_acm_read_usbx_app_thread_entry",
+  if (tx_thread_create(&ux_cdc_acm_read_thread, "cdc_acm_read_usbx_app_thread_entry",
                        usbx_cdc_acm_read_thread_entry, 1, pointer,
                        UX_DEVICE_APP_THREAD_STACK_SIZE, 20, 20, TX_NO_TIME_SLICE,
                        TX_AUTO_START) != TX_SUCCESS)
@@ -273,23 +292,85 @@ UINT MX_USBX_Device_Init(VOID *memory_ptr)
   }
 
   /* Create the usbx_cdc_acm_write_thread_entry thread */
-  if (tx_thread_create(&ux_cdc_write_thread, "cdc_acm_write_usbx_app_thread_entry",
+  if (tx_thread_create(&ux_cdc_acm_write_thread, "cdc_acm_write_usbx_app_thread_entry",
                        usbx_cdc_acm_write_thread_entry, 1, pointer,
                        UX_DEVICE_APP_THREAD_STACK_SIZE, 20, 20, TX_NO_TIME_SLICE,
                        TX_AUTO_START) != TX_SUCCESS)
   {
     return TX_THREAD_ERROR;
   }
+#endif
+  /* Allocate the stack for usbx cdc acm thread */
+  ret = tx_byte_allocate(byte_pool, (VOID **) &pointer, UX_DEVICE_APP_THREAD_STACK_SIZE, TX_NO_WAIT);
+  if (ret != TX_SUCCESS)
+  {
+    return TX_POOL_ERROR;
+  }
+  /* Create the usbx_cdc_acm_thread_entry thread */
+  ret = tx_thread_create(&ux_cdc_acm_thread, "cdc_acm_usbx_app_thread_entry",
+          usbx_cdc_acm_thread_entry, 1, pointer,
+          UX_DEVICE_APP_THREAD_STACK_SIZE, 20, 20, TX_NO_TIME_SLICE,
+          TX_AUTO_START);
+  if (ret != TX_SUCCESS)
+  {
+	return TX_THREAD_ERROR;
+  }
 
-  /* Create the event flags group */
-  if (tx_event_flags_create(&EventFlag, "Event Flag") != TX_SUCCESS)
+  /* Allocate the stack for usbx cdc acm test thread */
+  ret = tx_byte_allocate(byte_pool, (VOID **) &pointer, UX_DEVICE_APP_THREAD_STACK_SIZE, TX_NO_WAIT);
+  if (ret != TX_SUCCESS)
   {
-    return TX_GROUP_ERROR;
+    return TX_POOL_ERROR;
   }
-  if (tx_event_flags_create(&EventFlagCDC, "EventCDC Flag") != TX_SUCCESS)
+  /* Create the usbx_cdc_acm_thread_entry thread */
+  ret = tx_thread_create(&ux_cdc_acm_test_thread, "cdc_acm_test_thread_entry",
+		  usbx_cdc_acm_test_thread_entry, 1, pointer,
+          UX_DEVICE_APP_THREAD_STACK_SIZE, 20, 20, TX_NO_TIME_SLICE,
+          TX_AUTO_START);
+  if (ret != TX_SUCCESS)
   {
-    return TX_GROUP_ERROR;
+	return TX_THREAD_ERROR;
   }
+
+  /* 首次启动 USBX MSC     释放事件标志组 */
+  if (tx_event_flags_create(&EventFlagMsc, "Event MSC Flag") != TX_SUCCESS)
+  {
+	  _Error_Handler(__FILE__, __LINE__);
+  }
+
+  // 创建队列：名称、存储区、消息大小（每个消息是 ULONG 类型）、队列长度
+  ret = tx_queue_create(
+      &g_usb_receive_queue,          // 队列控制块
+      "USB Receive Queue",           // 队列名称（调试用）
+      sizeof(ULONG),                 // 每个消息的大小（这里传递的是缓冲区地址，类型为 ULONG）
+      g_usb_queue_storage,           // 队列存储区（必须是静态/全局内存）
+      sizeof(g_usb_queue_storage)    // 存储区总大小（= 消息大小 × 队列长度）
+  );
+  if (ret != TX_SUCCESS) {
+	  _Error_Handler(__FILE__, __LINE__);
+  }
+
+  /* 首次启动 USBX CDC ACM 释放事件标志组 */
+  ret = tx_event_flags_create(&EventFlagCdcAcm, "Event CDC ACM Flag");
+  if (ret != UX_SUCCESS)
+  {
+	_Error_Handler(__FILE__, __LINE__);
+  }
+
+  /* Create the event flags group
+   * ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   * 已参考瑞萨 https://en-support.renesas.com/knowledgeBase/18870541 代码
+   * 转移到 USBD_STORAGE_Activate() 和 USBD_CDC_ACM_Activate()，方便使能或关闭
+   */
+
+
+  // 初始化 CDC 发送缓冲互斥锁
+  ret = tx_mutex_create(&g_cdc_tx_mutex, "CDC TX Mutex", TX_INHERIT);
+  if (ret != TX_SUCCESS)
+  {
+      return TX_MUTEX_ERROR;
+  }
+
   /* USER CODE END MX_USBX_Device_Init1 */
 
   return ret;
@@ -373,4 +454,6 @@ VOID USBX_APP_Device_Init(VOID)
 
   /* USER CODE END USB_Device_Init_PostTreatment */
 }
+
+
 /* USER CODE END 2 */

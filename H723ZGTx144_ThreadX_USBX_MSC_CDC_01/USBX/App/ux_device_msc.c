@@ -30,6 +30,7 @@
 #include "sdmmc.h"
 #include "main.h"
 #include "fx_stm32_sd_driver.h"
+#include "app_usbx_device.h"   //!< 提供 EventFlagMsc
 #include "app_filex.h"
 /* USER CODE END Includes */
 
@@ -52,7 +53,6 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
-extern TX_EVENT_FLAGS_GROUP EventFlag;
 extern HAL_SD_CardInfoTypeDef USBD_SD_CardInfo;
 /* USER CODE END PV */
 
@@ -77,6 +77,13 @@ VOID USBD_STORAGE_Activate(VOID *storage_instance)
 {
   /* USER CODE BEGIN USBD_STORAGE_Activate */
   UX_PARAMETER_NOT_USED(storage_instance);
+
+//  /* 首次启动 USBX MSC     释放事件标志组 */
+//  if (tx_event_flags_create(&EventFlagMsc, "Event MSC Flag") != TX_SUCCESS)
+//  {
+//	  _Error_Handler(__FILE__, __LINE__);
+//  }
+
   /* USER CODE END USBD_STORAGE_Activate */
 
   return;
@@ -143,7 +150,7 @@ UINT USBD_STORAGE_Read(VOID *storage_instance, ULONG lun, UCHAR *data_pointer,
 //#endif
 
     /* Wait on readflag until SD card is ready to use for new operation */
-    if (tx_event_flags_get(&EventFlag, SD_READ_FLAG, TX_OR_CLEAR,
+    if (tx_event_flags_get(&EventFlagMsc, SD_READ_FLAG, TX_OR_CLEAR,
                            &ReadFlags, TX_WAIT_FOREVER) != TX_SUCCESS)
     {
       _Error_Handler(__FILE__, __LINE__);
@@ -202,7 +209,7 @@ UINT USBD_STORAGE_Write(VOID *storage_instance, ULONG lun, UCHAR *data_pointer,
     }
 
     /* Wait on writeflag until SD card is ready to use for new operation */
-    if (tx_event_flags_get(&EventFlag, SD_WRITE_FLAG, TX_OR_CLEAR,
+    if (tx_event_flags_get(&EventFlagMsc, SD_WRITE_FLAG, TX_OR_CLEAR,
                            &WriteFlags, TX_WAIT_FOREVER) != TX_SUCCESS)
     {
       _Error_Handler(__FILE__, __LINE__);

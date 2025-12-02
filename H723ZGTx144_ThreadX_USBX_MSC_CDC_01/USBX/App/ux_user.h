@@ -429,7 +429,7 @@
 
 /* Defined, this macro disables CDC ACM non-blocking transmission support. */
 
-#define UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE
+/* #define UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE */
 
 /* Defined, this macro enables device audio feedback endpoint support.  */
 

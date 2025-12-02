@@ -25,10 +25,13 @@ extern void MX_SDMMC2_SD_Init(void);
 
 /* USER CODE BEGIN 0 */
 #include "main.h"
-extern TX_EVENT_FLAGS_GROUP EventFlag;
+#include "app_usbx_device.h"   //!< 提供 EventFlagMsc
+
+/* defines for EVENT flags */
 #define SD_READ_FLAG   0x01
 #define SD_WRITE_FLAG  0x02
 #define SD_TIMEOUT     100U
+
 /* USER CODE END 0 */
 
 /**
@@ -173,7 +176,7 @@ void HAL_SD_TxCpltCallback(SD_HandleTypeDef *hsd)
   tx_semaphore_put(&sd_tx_semaphore);
 
   /* USER CODE BEGIN POST_TX_CMPLT */
-  if (tx_event_flags_set(&EventFlag, SD_WRITE_FLAG, TX_OR) != TX_SUCCESS)
+  if (tx_event_flags_set(&EventFlagMsc, SD_WRITE_FLAG, TX_OR) != TX_SUCCESS)
   {
     Error_Handler();
   }
@@ -194,7 +197,7 @@ void HAL_SD_RxCpltCallback(SD_HandleTypeDef *hsd)
   tx_semaphore_put(&sd_rx_semaphore);
 
   /* USER CODE BEGIN POST_RX_CMPLT */
-  if (tx_event_flags_set(&EventFlag, SD_READ_FLAG, TX_OR) != TX_SUCCESS)
+  if (tx_event_flags_set(&EventFlagMsc, SD_READ_FLAG, TX_OR) != TX_SUCCESS)
   {
     Error_Handler();
   }

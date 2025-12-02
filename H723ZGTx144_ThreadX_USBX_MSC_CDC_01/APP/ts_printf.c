@@ -87,16 +87,3 @@ void AppPrintf(const char *fmt, ...)
     tx_mutex_put(&AppPrintfSemp);
 }
 
-int _write(int file, char *ptr, int len)
-{
-  //HAL_UART_Transmit(&huart2,(uint8_t*)ptr, len, 1000);
-  return len;
-}
-
-int _read(int file, char *ptr, int len)
-{
-  //__HAL_UART_CLEAR_OREFLAG(&huart2);
-  //HAL_UART_Receive(&huart2,(uint8_t*)ptr, len,HAL_MAX_DELAY);
-  //HAL_UART_Transmit(&huart2,(uint8_t*)ptr,len, 1000);
-  return len;
-}

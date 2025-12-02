@@ -37,16 +37,24 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "tx_api.h"
+#include "ux_device_class_cdc_acm.h"
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
+/**
+ * 启用CDC ACM 非阻塞传输，必须禁用 UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE，并且需要在 USBX 字节池和 USBX_MEMORY_SIZE 中添加 2048 个额外字节。
+ * USBX_MEMORY_SIZE 就是 USBX_DEVICE_MEMORY_STACK_SIZE：
+ * https://github.com/STMicroelectronics/STM32CubeH5/blob/188d908ee29667daf0ec2f1dd40bfc2e91389e5e/Projects/STM32H573I-DK/Applications/OpenBootloader/USBX/App/app_usbx_device.c#L25
+ *   ↓ USBX_DEVICE_MEMORY_STACK_SIZE 30KB不够用，卡住在 ux_device_stack_class_register(_ux_system_slave_class_cdc_acm_name,
+ *   ↓ 改为50K够用！
+ */
 
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
-#define USBX_DEVICE_MEMORY_STACK_SIZE       1024*30
+#define USBX_DEVICE_MEMORY_STACK_SIZE       1024*50
 
 #define UX_DEVICE_APP_THREAD_STACK_SIZE   4096
 #define UX_DEVICE_APP_THREAD_PRIO         10
@@ -89,6 +97,10 @@ VOID USBX_APP_Device_Init(VOID);
 #endif
 
 /* USER CODE BEGIN 2 */
+/* Exported variables --------------------------------------------------------*/
+extern TX_EVENT_FLAGS_GROUP EventFlagMsc;
+extern TX_EVENT_FLAGS_GROUP EventFlagCdcAcm;
+extern UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER cdc_acm_callback_parameter;
 
 /* USER CODE END 2 */
 

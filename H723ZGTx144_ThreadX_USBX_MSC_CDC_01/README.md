@@ -956,6 +956,50 @@ typedef struct UX_SLAVE_CLASS_CDC_ACM_STRUCT
 > >   - **在设置线路编码时，检查波特率是否符合最低要求，并更新配置。**
 > >   - **当主机请求设置或获取线路编码时，通过 `ux_device_class_cdc_acm_ioctl` 函数读取或设置相应的参数。**
 > >   - **该函数为虚拟串口功能提供了对主机请求的响应机制，并实现了 CDC ACM 协议的一部分。**
+>
+> [ST论坛：USBX 独立模式使用 API](https://community.st.com/t5/stm32-mcus-embedded-software/usbx-cdc-acm-write-problem/td-p/703033)
+>
+> > 如果有人感兴趣的话，我已经根据这里引用的 usbx 回归测试，在 STM32 H523 上以 USBX 独立模式实现了 CDC_ACM。
+> >
+> > 我最终使用了ux_device_class_cdc_acm_write_with_callback ()。
+> >
+> > 要使该功能可用， 需要将 CubeMx 中的UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE定义设置为 false。
+> >
+> > 该应用程序需要提供读/写回调函数，这些函数需要在 CDC 激活后进行注册：
+> >
+> > ```c
+> >       cdc_acm_slave_callback.ux_device_class_cdc_acm_parameter_read_callback = USBX_cdc_acm_device_read_callback;
+> >       cdc_acm_slave_callback.ux_device_class_cdc_acm_parameter_write_callback = USBX_cdc_acm_device_write_callback;
+> >       ux_device_class_cdc_acm_ioctl(cdc_acm, UX_SLAVE_CLASS_CDC_ACM_IOCTL_TRANSMISSION_START, (VOID*)&cdc_acm_slave_callback);
+> > ```
+> >
+> > 然后只需调用ux_device_class_cdc_acm_write_with_callback () 并等待写入回调，然后再执行一次。
+> >
+> > 它似乎相当稳定，没有数据丢失，我能够以大约 3Mbps 的吞吐量向 Windows PC 执行类似 printf 的输出（每秒 5-10k 行，具体取决于长度）。
+> >
+> > [@B.Montanari](https://community.st.com/t5/user/viewprofilepage/user-id/289)，既然您写过几篇关于 USBX 的优秀知识库文章，或许可以好好记录一下如何在 USBX 独立模式下执行 CDC_ACM 操作？
+> >
+> > 我花了很长时间才在 USBX 虚拟串口上实现一个简单的 printf() 函数。以前用 STM32 USB 库的时候要容易得多……
+> >
+> > 
+> >
+> > 我想我找到了如何在独立模式下使用 ux_device_class_cdc_acm_write_run() 的方法：
+> >
+> > ```c
+> > bool write_cdc_acm(UX_SLAVE_CLASS_CDC_ACM *cdc_acm, UCHAR *ptr, ULONG size) {
+> >   ULONG nwritten = 0;
+> >   unsigned r = ux_device_class_cdc_acm_write_run(cdc_acm, ptr, size, &nwritten);
+> >   while (r == UX_STATE_WAIT) {
+> >     ux_system_tasks_run();
+> >     r = ux_device_class_cdc_acm_write_run(cdc_acm, ptr, size, &nwritten);
+> >   }
+> >   return r == UX_STATE_NEXT && nwritten == size;
+> > }
+> > ```
+> >
+> > 未来扩展：支持部分转账（nwritten != size）。
+>
+> 
 
 以上文章中 USBX 都是独立模式下运行，但 ThreadX + USBX 默认配置 UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE 是 ENABLE，相应的在代码中，C预处理器 ux_device_class_cdc_acm_write_callback()、ux_device_class_cdc_acm_read_callback() 这两个函数指针检测到没有定义UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE就被注释掉了，ThreadX会对USBX CDC ACM 设备类创建两个任务。直接是 _ux_device_class_cdc_acm_write_with_callback() 调用发送后发送事件标志组，任务\_ux_device_class_cdc_acm_bulkin_thread() 获取事件标志组
 
@@ -1122,8 +1166,442 @@ typedef struct UX_SLAVE_CLASS_CDC_ACM_STRUCT
 > > > UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE ENABLE //!< 可以正常枚举 MSC 和 CDC ACM （CDC ACM 阻塞式）
 > > >  UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE ENABLE //!< 不能正常枚举 MSC 和 CDC ACM （CDC ACM 非阻塞式）
 > > > ```
+>
+>  
+>
+> [tjaekel](https://community.st.com/t5/user/viewprofilepage/user-id/71192)
+>
+> > 我的“五分钱”：
+> >
+> > - USB VCP 每个数据包最大只能容纳 64 字节。
+> > - 每个时间段内可以发送多少个数据包——取决于主机是否允许设备发送新数据包（也许主机暂停以请求新数据包，导致 MCU 内部溢出）。
+> > - 如果发送的数据“过多、过快”，可能会导致内部缓冲区溢出（如果这种情况发生，那将是固件或 HAL 驱动程序中的一个漏洞，但哪个软件/固件是“绝对稳定”的呢？）
+> > - 数据包之间稍作等待（例如 1 毫秒），数据包大小不要超过 64 字节。
+> > - 尝试找到有关上次发送成功与否的线索（在你继续发送更多内容之前 = MCU 中的流程控制）
+> >
+> > 如果处理稍大一些的数据仍然有效，那么处理稍大一些的数据可能也有效，因为使用了 DMA，并且在一次传输进行中，可以立即获取下一个数据块（将其放入队列）。
+> >
+> > 看起来更像是发生了“内存损坏”：你覆盖了一个缓冲区（原本用于 VCP 传输）。或者你排队等待通过 DMA（经由 USB）发送的数据包过多，导致 DMA 描述符超过了可设置的最大值。
+> >
+> > 很难说，总之应该有“流量控制”：“不要发送过多数据，也不要发送过快”。也许，固件驱动程序中没有实现这种流量控制（假设偶尔执行“printfs”操作速度很慢）。
+> >
+> > 当我进入 RTOS 调度器并且没有线程被调度/激活时，主要原因是内存损坏。
+>
+> [Mark5918](https://community.st.com/t5/user/viewprofilepage/user-id/62332) 助理二 [回应**FBL**](https://community.st.com/t5/stm32-mcus-products/stm32u5a5-usb-cdc-issue/m-p/642659/highlight/true#M236246)：
+>
+> > 对于 CDC_ACM IN（MCU 到计算机），如果主机正忙于阻塞写入，USB 将不允许 MCU 发送数据。因此，它不应该存在“流量控制”和溢出问题
+> >
+> > Ux_Device_CDC_ACM 示例 项目使用了阻塞式读写操作。我想尝试非阻塞式写入。如 README 文件中所述：
+> >
+> > - **CDC ACM 非阻塞传输默认处于禁用状态。要启用非阻塞传输，必须禁用 UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE，并且需要在 USBX 字节池和 USBX_MEMORY_SIZE 中添加 2048 个额外字节。**
+> >
+> > > 个人注释：
+> > >
+> > > USBX 字节池对对应宏：UX_DEVICE_APP_MEM_POOL_SIZE
+> > >
+> > > > 我的是100K够用
+> > >
+> > > USBX_MEMORY_SIZE对应宏：USBX_DEVICE_MEMORY_STACK_SIZE
+> > >
+> > > > [对应关系参考： STM32H5的示例工程](https://github.com/STMicroelectronics/STM32CubeH5/blob/188d908ee29667daf0ec2f1dd40bfc2e91389e5e/Projects/STM32H573I-DK/Applications/OpenBootloader/USBX/App/app_usbx_device.c#L25)
+> > > >
+> > > > USBX_DEVICE_MEMORY_STACK_SIZE 之前是30K，禁用 UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE 后，卡住在 ux_device_stack_class_register(_ux_system_slave_class_cdc_acm_name，改为50K够用！
+> >
+> > “USBX 字节池增加 2048”是指所有线程的字节池都需要增加，还是只需要增加部分线程的字节池？USBX_MEMORY_SIZE 的定义在哪里？
+>
+> [FBL](https://community.st.com/t5/user/viewprofilepage/user-id/2081) ST员工
+>
+> > 感谢您指出这一点。确实，这很容易让人困惑。USBX_DEVICE_MEMORY_STACK_SIZE 和 UX_DEVICE_APP_MEM_POOL_SIZE 应该精确定义，以便用户调整所需的内存。在某些应用程序中，我们将其定义如下：
+> >
+> > ```c
+> > #define USBX_MEMORY_SIZE             (32U * 1024U)
+> > ```
+> >
+> > 此问题已上报给专门团队。
+
+[ST论坛：禁用 UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE 选项后，无法枚举 USB 设备](https://community.st.com/t5/stm32-mcus-products/no-usb-enumeration-with-ux-device-class-cdc-acm-transmission/td-p/859316)
+
+> 原因是字节池和 USBX_MEMORY_SIZE 大小不够
+>
+> [Ux_Device_CDC_ACM示例工程：对于UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE 的值解释](https://github.com/STMicroelectronics/STM32CubeWBA/tree/893fc71d008cdbb09de590c44b61c79cd92e7931/Projects/NUCLEO-WBA65RI/Applications/USBX/Ux_Device_CDC_ACM#notes)
+>
+> > **默认禁用 CDC ACM 非阻塞传输，要启用非阻塞传输，必须禁用 UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE，并在 USBX 字节池和 USBX_MEMORY_SIZE 中增加 2048 个字节。**
+
+[ST论坛：USB高速尝试注册CDC_ACM_收发回调函数，速度还是只有4.4Mbps](https://community.st.com/t5/stm32-mcus-products/nucleo-u5a5zj-q-usb-cdc-acm-maximum-speed-using-usbx/td-p/633968)
+
+>  [坎南1](https://community.st.com/t5/user/viewprofilepage/user-id/40424)三级助理
+>
+> > 我是否需要使用非阻塞函数*ux_device_class_cdc_acm_write_with_callback*来获得最大吞吐量*？* 无论如何，我已经尝试过禁用宏 *UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE 并在**USBD_CDC_ACM_Activate*函数中设置回调函数。
+> >
+> > ```c
+> >   /* Start Bulk transmission thread */
+> >   UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER CDC_VCP_Callback;
+> >   CDC_VCP_Callback.ux_device_class_cdc_acm_parameter_read_callback = &USBD_CDC_ACM_read_callback;
+> >   CDC_VCP_Callback.ux_device_class_cdc_acm_parameter_write_callback = &USBD_CDC_ACM_write_callback;
+> >   if (ux_device_class_cdc_acm_ioctl(cdc_acm, UX_SLAVE_CLASS_CDC_ACM_IOCTL_TRANSMISSION_START,
+> >                                     &CDC_VCP_Callback) != UX_SUCCESS)
+> >   {
+> >     Error_Handler();
+> >   }
+> > ```
+> >
+> > 不幸的是，代码不知何故进入了硬故障处理程序。我还没深入研究，因为我不确定它是否能解决速度问题。如果这种回调模式能提供更高的吞吐量，是否有相关的示例项目？
+> >
+> > 在这个示例代码中，是否需要修改任何配置才能使我通过 USB HS VCP 类获得至少 10Mbps 的速度？或者这是 USBx USB 协议栈的限制？我是否需要编写一个独立于 USBx 协议栈的代码来获得更高的速度？我认为 USB HS 最高支持 480Mbps，所以我至少应该获得一半的速度，即 240Mbps（30Mbps）。在这个应用中，是什么因素限制了速度？
+> >
+> > 更新：
+> >
+> > 这是 OTG_HS_PCD_Init 函数，其中 **DMA 已禁用**，我需要启用 DMA 以提高速度吗？
+>
+> [tjaekel](https://community.st.com/t5/user/viewprofilepage/user-id/71192) 带领
+>
+> > 顺便说一下：我试过了：我已经启用了DMA
+> >
+> > 和以前一样（对我来说没有问题—— 没有任何区别）。
+> >
+> > 我尝试使用我的 ACM 代码（U5A5，Azure RTOS）。即使我不信任 Tick 计数频率……我得到的结果是：
+> >
+> > 从MCU向主机发送640 KB的数据：
+> >
+> > ```c
+> > 	int i;
+> > 	unsigned int startTS, endTS;
+> > 	startTS = HAL_GetTick();
+> > 	for (i = 0; i < 10000; i++)
+> > 		VCP_UART_Send((const uint8_t *)"1111111111222222222233333333334444444444555555555566666666667777", 64);
+> > 	endTS = HAL_GetTick();
+> > 	print_log(out, "\r\nstart: %ul | end: %ul | delta: %ul | %ul bytes\r\n", startTS, endTS, endTS - startTS, i * 64);
+> > ```
+> >
+> > 报道称：
+> >
+> > ```c
+> > start: 763 | end: 1264 | delta: 501 | 640000 bytes
+> > ```
+> >
+> > 我的 Azure RTOS HAL_GetTick() 函数似乎有问题：
+> > 发送这 640,000 字节的数据大约需要 1 秒（根据主机终端的观察）。
+> > 过期时钟周期的返回值 501 似乎是 1000 毫秒。
+> >
+> > 这将导致：VCP UART (ACM) 约为：**5,120,000 bps** (5.1 Mbps)。
+> >
+> > 即使我启用了高速模式（HS），我也期望更高的吞吐量。
+> > 不过，它仍然在我预期的ACM/VCP UART吞吐量范围内：**5-7 Mbps**（即使USB配置为高速模式）。这**取决于主机**，例如，主机可能每1毫秒就向MCU请求一次新的响应，或者在繁忙时请求的间隔时间更长。
+> >
+> > 或许：
+> > 主机显示接收到的字节数会减慢速度！电脑会在 TeraTerm 中打印所有接收到的字节数。这或许会降低速度（当主机无法快速显示时，它就不会再快速请求数据了）。
+> >
+> > 备注：
+> > USB VCP (ACM) 吞吐量的测量很大程度上取决于主机的交互方式。您不能仅通过测量 MCU 端的操作来判断 MCU 的性能/速度：**MCU 是一个设备，其时序取决于主机（PC）——主机速度可能会变慢！**
+> >
+> > 最后测量的是：“主机能够实时处理多少数据”（允许 MCU 发送的数据）
+>
+>  [坎南1](https://community.st.com/t5/user/viewprofilepage/user-id/40424)三级助理
+>
+> > [@FBL](https://community.st.com/t5/user/viewprofilepage/user-id/2081) 谢谢回复。我已经解决了代码中的硬故障处理问题，现在 非阻塞模式下的 *ux_device_class_cdc_acm_write_with_callback API 可以正常工作了。但是速度从阻塞模式下的 5 Mbps 降到了 3 Mbps。* 
+> >
+> > 我还尝试在配置中启用内部 IP DMA。下面附上 DMA 的 ioc 配置截图。GPDMA 配置已来自示例项目。
+> >
+> > **在 ioc 中启用 DMA 后，写入函数 *_ux_dcd_stm32_transfer_request* 无法通过 USB 发送数据，并且正在等待信号量**。
+> >
+> > > 备注：楼主用的STM32U5A内置USB高速PHY且有DMA
+> >
+> > ```c
+> >             /* We should wait for the semaphore to wake us up.  */
+> >             status =  _ux_utility_semaphore_get(&transfer_request -> ux_slave_transfer_request_semaphore,
+> >                                                 (ULONG)transfer_request -> ux_slave_transfer_request_timeout);
+> > ```
+> >
+> > 所以，我的疑问是，内部DMA的正常工作是否还需要其他配置？我就是卡在DMA配置这部分了。
+> >
+> > 接下来，在未启用 DMA 且使用回调方法的运行项目中，存在另一个问题，我怀疑是延迟限制了 USB 的速度。我将解释这个问题。
+> >
+> > *在usbx_cdc_acm_write_thread_entry*中调用 *ux_device_class_cdc_acm_write_with_callback 函数后，我将在该线程中等待事务完成，并从**_ux_device_class_cdc_acm_bulkin_thread* 中执行回调函数 。以下是*usbx_cdc_acm_write_thread_entry*中的代码 。
+> >
+> > ```c
+> > while(total_bytes_to_send)
+> > {
+> >     if (usb_ready)
+> >     {
+> > 		usb_ready = 0;
+> > 
+> > 		if (buf_indx >= APP_TX_DATA_SIZE)
+> > 		{
+> > 			buf_indx = 0;
+> > 		}
+> > 
+> > 		if (total_bytes_to_send > APP_TX_DATA_SIZE)
+> > 		{
+> > 			bytes_to_send = APP_TX_DATA_SIZE;
+> > 		}
+> > 		else
+> > 		{
+> > 			bytes_to_send = total_bytes_to_send;
+> > 		}
+> > 
+> > 		if (ux_device_class_cdc_acm_write_with_callback(cdc_acm, (UCHAR *)(&UserTxBufferFS[buf_indx]),
+> > 			bytes_to_send) != UX_SUCCESS)
+> > 		{
+> > 			// Error condition
+> > 			total_bytes_to_send = 0;
+> > 		}
+> >     }
+> > 	
+> >     /* Sleep thread for 10ms */
+> >     tx_thread_sleep(MS_TO_TICK(10));
+> > }
+> > ```
+> >
+> > 查看更多
+> >
+> > 这里，每次写入后，回调函数都会设置*usb_ready标志。问题在于这里的 sleep 函数* *tx_thread_sleep(MS_TO_TICK(10));，* 如果没有这 10 毫秒的延迟，应用程序发送的事件将不会触发 *_ux_device_class_cdc_acm_bulkin_thread* 函数来发送数据。
+> >
+> > ```c
+> >            /* Wait until we have a event sent by the application. */
+> >             status =  _ux_utility_event_flags_get(&cdc_acm -> ux_slave_class_cdc_acm_event_flags_group, UX_DEVICE_CLASS_CDC_ACM_WRITE_EVENT,
+> >                                                                                             UX_OR_CLEAR, &actual_flags, UX_WAIT_FOREVER);
+> > 
+> >             /* Check the completion code. */
+> >             if (status == UX_SUCCESS)
+> >             {
+> > ```
+> >
+> > 所以这种延迟是无法避免的吗？也许这就是我遇到的USB回调方法吞吐量问题的原因。请问您有什么意见或建议？ 我一直在尝试提高U5A5的USB速度。
+> >
+> > [@tjaekel](https://community.st.com/t5/user/viewprofilepage/user-id/71192) 您能否推荐一篇关于配置 USB DMA 的文章或文档？或者分享一下您的方法？我的内存只有 2.5 MB，所以我一直用得很省，也许以后会出问题。谢谢您的提醒。
+>
+> [Mark5918](https://community.st.com/t5/user/viewprofilepage/user-id/62332)
+>
+> 助理二
+>
+> [回复**Kannan1**](https://community.st.com/t5/stm32-mcus-products/nucleo-u5a5zj-q-usb-cdc-acm-maximum-speed-using-usbx/m-p/636890/highlight/true#M234793)
+>
+> > 我尝试构建一个没有阻塞写入的项目。
+> >
+> > **当我注释掉在 ux_user.h 中定义“#define UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE”，**
+> >
+> > **代码总是在调用 _ux_utility_memory_free_block_best_get() 函数时失败。**
+> >
+> > ```c
+> > cdc_acm -> ux_slave_class_cdc_acm_bulkout_thread_stack =
+> > _ux_utility_memory_allocate(UX_NO_ALIGN, UX_REGULAR_MEMORY, UX_THREAD_STACK_SIZE * 2);
+> > ```
+> >
+> > 在函数 _ux_device_class_cdc_acm_initialize() 中，无论我增加多少
+> >
+> > ```c
+> > #define TX_APP_MEM_POOL_SIZE (1024*1024)
+> > #define UX_DEVICE_APP_MEM_POOL_SIZE (8192*8)
+> > #define USBPD_DEVICE_APP_MEM_POOL_SIZE (5000*2)
+> > ```
+> >
+> > 你是如何修改原代码以实现无阻塞写入功能的？
+> >
+> > 无法移除 tx_thread_sleep(MS_TO_TICK(10))，因为这些线程具有相同的优先级，但没有定义切片时间。
+> >
+> > 我猜你可以在回调函数中调用 ux_device_class_cdc_acm_write_with_callback() 来避免这种情况。
+>
+> 
+
+[瑞萨：使用非阻塞式 API 进行 USBX CDC 设备写入](https://en.na4.teamsupport.com/knowledgeBase/19116532)
+
+> 从 SSP 1.6.0 版本开始，提供了一个写入回调 API，用于执行非阻塞写入操作。这样，您无需等待 API 完成即可触发写入。您可以使用回调来检测写入是否完成。以下是具体操作方法：
+>
+> 按如下所示注册回调函数。这将创建 2 个内部线程和一些其他的 ThreadX 对象来处理读写操作。
+>
+> ```c
+> UINT usb_cdc_write_callback(struct UX_SLAVE_CLASS_CDC_ACM_STRUCT *cdc_acm, UINT status, ULONG length);
+> UINT usb_cdc_read_callback(struct UX_SLAVE_CLASS_CDC_ACM_STRUCT *cdc_acm, UINT status, UCHAR *data_pointer, ULONG length);
+> 
+> UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER callback_info;
+> /* Set the callback parameter. */
+> callback_info.ux_device_class_cdc_acm_parameter_write_callback = usb_cdc_write_callback;
+> callback_info.ux_device_class_cdc_acm_parameter_read_callback = usb_cdc_read_callback;
+> 
+> /* Set the USB CDC to use transmission with callback */
+> status = ux_device_class_cdc_acm_ioctl(gp_cdc, UX_SLAVE_CLASS_CDC_ACM_IOCTL_TRANSMISSION_START, &callback_info);
+> ```
+>
+> 然后使用以下命令写入：
+>
+> ```c
+> /* Write the data */
+> status = ux_device_class_cdc_acm_write_with_callback(gp_cdc, buffer, (ULONG)cdc_write_size);
+> ```
+>
+> 写入操作完成后，回调函数会发出信号，例如：
+>
+> ```c
+> UINT usb_cdc_write_callback(struct UX_SLAVE_CLASS_CDC_ACM_STRUCT *cdc_acm, UINT status, ULONG length)
+> {
+>     UINT ret = UX_SUCCESS;
+>     SSP_PARAMETER_NOT_USED(length);
+> 
+>     if ((UX_SUCCESS == status) && (gp_cdc == cdc_acm))
+>     {
+>         ret = tx_event_flags_set(&g_usb_event_flags, USB_CDC_WRITE_COMPLETE_EVENT, TX_OR);
+>     }
+> 
+>     return ret;
+> }
+> ```
+
+[瑞萨：非阻塞式 USB CDC 读写](https://en-support.renesas.com/knowledgeBase/18870541)
+
+> 下面附上一个示例，展示了在**非阻塞单线程应用程序**中读取/写入 USB CDC 数据。
+>
+> 它不使用通信框架，而是通过 USBX 设备类 CDC-ACM 协议栈在底层运行。
+>
+> 此外，它还使用了以下函数：
+>
+> ux_device_class_cdc_acm_ioctl()
+>
+> 包含两个回调函数，分别用于处理数据写入和数据读取。
+>
+> 使用回调函数可以实现非阻塞功能。
+>
+> 本示例针对 TB-S5D9，但如果您熟悉 Synergy 平台，则应该可以将其移植到其他套件和 MCU。
+>
+> 在这个例子中，接收到的任何数据都会进行双缓冲，并将活动缓冲区的地址发布到队列中。
+>
+> 发送到队列的任何数据都会回显到主机。
+>
+> S5D5_TB_CDC_ACM_non_blocking.zip
+>
+>  这个元件只看源码 comms_thread_entry.c
+>
+> 注意回调函数相关代码
+>
+> ```c
+> UINT cdc_acm_read_callback(struct UX_SLAVE_CLASS_CDC_ACM_STRUCT *cdc_acm, UINT status, UCHAR *data_pointer, ULONG length)
+> {
+>     UINT result = UX_SUCCESS;
+> 
+>     SSP_PARAMETER_NOT_USED(cdc_acm);
+>     SSP_PARAMETER_NOT_USED(status);
+> 
+>     /* Storage for the address value of the structure, passed into the queue */
+>     ULONG ptr_addr;
+> 
+>     /* Store the data into g_rec_buffer[n][] */
+>     for (uint32_t i = 0; i < length; i++)
+>     {
+>         g_rec_buffer[g_rec_buffer_index].data[i] = *data_pointer++;
+>     }
+> 
+>     /* Store the length of the data packet received */
+>     g_rec_buffer[g_rec_buffer_index].length = (uint8_t)length;
+> 
+>     /* send the address of the buffer that has been populated */
+>     ptr_addr = (ULONG)&g_rec_buffer[g_rec_buffer_index];
+>     tx_queue_send(&g_usb_receive_queue, &ptr_addr, TX_NO_WAIT);
+> 
+>     /* switch buffer for next receive action */
+>     g_rec_buffer_index = (uint8_t)(1 - g_rec_buffer_index);
+> 
+> 
+>     return result;
+> }
+> 
+> UINT cdc_acm_write_callback(struct UX_SLAVE_CLASS_CDC_ACM_STRUCT *cdc_acm, UINT status, ULONG length)
+> {
+>     UINT result = UX_SUCCESS;
+>     SSP_PARAMETER_NOT_USED(cdc_acm);
+>     SSP_PARAMETER_NOT_USED(length);
+> 
+>     if (UX_SUCCESS == status)
+>     {
+>         result = tx_event_flags_set(&g_cdc_event_flags,  USB_CDC_WRITE_COMPLETE, TX_OR);
+>     }
+> 
+>     return result;
+> }
+> 
+> ```
+>
+> 可以发现使用了事件标志组：g_cdc_event_flags
+>
+> 对比 ST的USBX设备例程：CDC_ACM 转 UART 桥
+>
+> [x-cube-azrtos-h7-main\x-cube-azrtos-h7-main\Projects\NUCLEO-H723ZG\Applications\USBX\Ux_Device_CDC_ACM](https://github.com/STMicroelectronics/x-cube-azrtos-h7/tree/main/Projects/NUCLEO-H723ZG/Applications/USBX/Ux_Device_CDC_ACM)
+>
+> 有两个线程，USB发送线程 usbx_cdc_acm_write_thread_entry 和USB接收线程usbx_cdc_acm_read_thread_entry，虽然UART是全双工，但USB2.0是半双工（USB发送的时候就不能接收数据），那么这种情况下 ST 实现的 USB 转 UART 桥接程序，UART 可以看作是被 USB 限制成半双工了，那么就可以解释源码为什么事件标志组 EventFlagCDC 会被 USB 发送线程和接收线程共用了：
+>
+> ```c
+> // USB 接收函数（已删改仅保留核心逻辑）
+> VOID usbx_cdc_acm_read_thread_entry(ULONG thread_input)
+> {
+>   while (1)
+>   {
+>       /* Read the received data in blocking mode */
+>       ux_device_class_cdc_acm_read(cdc_acm, (UCHAR *)UserRxBufferFS, 64,
+>                                    &actual_length);
+>       if (actual_length != 0)
+>       {     
+>         /* Send the data via UART */
+>         HAL_UART_Transmit_DMA(uart_handler, (uint8_t *)UserRxBufferFS, actual_length);
+> 
+>         /* Wait until the requested flag TX_NEW_TRANSMITTED_DATA is received */
+>         tx_event_flags_get(&EventFlagCDC, //!< 等待获取UART收/发完成回调函数释放事件标志
+>                            TX_NEW_TRANSMITTED_DATA, TX_OR_CLEAR, 
+>                                &senddataflag, TX_WAIT_FOREVER);
+>       }
+>       else
+>       {	
+>         /* Sleep thread for 10ms if no data received */
+>         tx_thread_sleep(MS_TO_TICK(10));
+>       }
+>   }
+> }
+>     
+> // USB 发送函数（已删改仅保留核心逻辑）
+> VOID usbx_cdc_acm_write_thread_entry(ULONG thread_input)
+> {
+>   while (1)
+>   {
+>       /* Wait until the requested flag RX_NEW_RECEIVED_DATA is received */
+>       tx_event_flags_get(&EventFlagCDC, //!< 等待获取UART收/发完成回调函数释放事件标志
+>                        RX_NEW_RECEIVED_DATA, TX_OR_CLEAR,
+>                            &receivedataflag, TX_WAIT_FOREVER);
+> 
+>       ... //!< 处理UART接收缓冲区（即USB发送缓冲区）的逻辑
+> 
+>       /* Send data over the class cdc_acm_write */
+>       /* USB 阻塞式发送 */
+>       ux_device_class_cdc_acm_write(cdc_acm, (UCHAR *)(&UserTxBufferFS[buffptr]),
+>                                         buffsize, &actual_length) == UX_SUCCESS)
+> 
+>       ... //!< 处理UART接收缓冲区（即USB发送缓冲区）的逻辑
+>   }
+> }
+> 
+> // UART 发送完成回调函数（已删改仅保留核心逻辑）
+> void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+> {
+>   /* Set TX_NEW_TRANSMITTED_DATA flag */
+>   tx_event_flags_set(&EventFlagCDC, TX_NEW_TRANSMITTED_DATA, TX_OR); //!< 释放事件标志
+> }
+> 
+> // UART 接收完成回调函数（已删改仅保留核心逻辑）
+> void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+> {
+>   /* Set RX_NEW_RECEIVED_DATA flag */
+>   tx_event_flags_set(&EventFlagCDC, RX_NEW_RECEIVED_DATA, TX_OR); //!< 释放事件标志
+> 
+> ... //!< 处理UART接收缓冲区（即USB发送缓冲区）的逻辑
+> 
+>   /* Start another reception: provide the buffer pointer with offset and the buffer size */
+>   HAL_UART_Receive_IT(uart_handler, (uint8_t *)UserTxBufferFS + UserTxBufPtrIn, 1);
+> }
+> ```
+>
+> 瑞萨是出处
+
+
 
 **RTOS 要想 CDC ACM 非阻塞发送，将 UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE  改为 DISABLE：**
+
+
 
 然后参考这个帖子：https://community.st.com/t5/stm32-mcus-products/stm32u5a5-usb-cdc-issue/td-p/641916
 

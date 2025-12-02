@@ -35,7 +35,11 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "ux_device_cdc_acm.h"
+#include "main.h"
+#include "app_usbx_device.h"
+#include <stdint.h>
+#include "tx_api.h"
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -59,7 +63,12 @@ VOID USBD_CDC_ACM_Deactivate(VOID *cdc_acm_instance);
 VOID USBD_CDC_ACM_ParameterChange(VOID *cdc_acm_instance);
 
 /* USER CODE BEGIN EFP */
-
+UINT USBD_CDC_ACM_Read_Callback(struct UX_SLAVE_CLASS_CDC_ACM_STRUCT *cdc_acm, UINT status, UCHAR *data_pointer, ULONG length);
+UINT USBD_CDC_ACM_Write_Callback(struct UX_SLAVE_CLASS_CDC_ACM_STRUCT *cdc_acm, UINT status, ULONG length);
+//VOID usbx_cdc_acm_write_thread_entry(ULONG thread_input);
+//VOID usbx_cdc_acm_read_thread_entry(ULONG thread_input);
+void usbx_cdc_acm_thread_entry(ULONG thread_input);
+void usbx_cdc_acm_test_thread_entry(ULONG thread_input);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
@@ -68,6 +77,9 @@ VOID USBD_CDC_ACM_ParameterChange(VOID *cdc_acm_instance);
 /* USER CODE END PD */
 
 /* USER CODE BEGIN 2 */
+/* Exported variables --------------------------------------------------------*/
+extern TX_MUTEX g_cdc_tx_mutex;
+extern TX_QUEUE g_usb_receive_queue;
 
 /* USER CODE END 2 */
 
