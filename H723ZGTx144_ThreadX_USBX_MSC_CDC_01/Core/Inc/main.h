@@ -54,6 +54,9 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
 void _Error_Handler(const char * file, uint32_t line);
+
+extern HAL_SD_CardInfoTypeDef USBD_SD_CardInfo;
+
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/

@@ -32,6 +32,11 @@
 #include "fx_stm32_sd_driver.h"
 #include "app_usbx_device.h"   //!< 提供 EventFlagMsc
 #include "app_filex.h"
+
+#include "ux_api.h"
+#include "ux_device_stack.h"
+#include "ux_device_class_storage.h"
+#include "ux_device_class_storage.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -41,7 +46,12 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+/* MSC与FileX测试函数访问SD卡的状态标记、互斥锁 */
+TX_MUTEX msc_state_mutex; // 保护“真正的 SD 介质访问（HAL_SD_* + FileX 操作）”。主机通过 MSC、或本地 FileX 测速函数，任何一次读写都要先拿这把锁，确保同一时间只有一方占用 SD
+UINT     msc_is_online = UX_TRUE;
 
+TX_MUTEX sd_media_lock; // 用它来保护 “MSC 是否已注册” 这一状态，避免重复注销/注册
+volatile UINT g_sd_medium_present = UX_TRUE; //介质已移除的标志
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -53,7 +63,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
-extern HAL_SD_CardInfoTypeDef USBD_SD_CardInfo;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -77,12 +87,6 @@ VOID USBD_STORAGE_Activate(VOID *storage_instance)
 {
   /* USER CODE BEGIN USBD_STORAGE_Activate */
   UX_PARAMETER_NOT_USED(storage_instance);
-
-//  /* 首次启动 USBX MSC     释放事件标志组 */
-//  if (tx_event_flags_create(&EventFlagMsc, "Event MSC Flag") != TX_SUCCESS)
-//  {
-//	  _Error_Handler(__FILE__, __LINE__);
-//  }
 
   /* USER CODE END USBD_STORAGE_Activate */
 
@@ -127,7 +131,7 @@ UINT USBD_STORAGE_Read(VOID *storage_instance, ULONG lun, UCHAR *data_pointer,
   UX_PARAMETER_NOT_USED(media_status);
 
   ULONG ReadFlags = 0U;
-
+  tx_mutex_get(&sd_media_lock, TX_WAIT_FOREVER);
   /* Check if the SD card is present */
 //  if (HAL_GPIO_ReadPin(GPIOF, GPIO_PIN_5) != GPIO_PIN_RESET)
 //  {
@@ -156,7 +160,7 @@ UINT USBD_STORAGE_Read(VOID *storage_instance, ULONG lun, UCHAR *data_pointer,
       _Error_Handler(__FILE__, __LINE__);
     }
 //  }
-
+    tx_mutex_put(&sd_media_lock);
   /* USER CODE END USBD_STORAGE_Read */
 
   return status;
@@ -185,7 +189,7 @@ UINT USBD_STORAGE_Write(VOID *storage_instance, ULONG lun, UCHAR *data_pointer,
   UX_PARAMETER_NOT_USED(media_status);
 
   ULONG WriteFlags = 0U;
-
+  tx_mutex_get(&sd_media_lock, TX_WAIT_FOREVER);
   /* Check if the SD card is present */
 //  if (HAL_GPIO_ReadPin(GPIOF, GPIO_PIN_5) != GPIO_PIN_RESET)
 //  {
@@ -215,7 +219,7 @@ UINT USBD_STORAGE_Write(VOID *storage_instance, ULONG lun, UCHAR *data_pointer,
       _Error_Handler(__FILE__, __LINE__);
     }
 //  }
-
+    tx_mutex_put(&sd_media_lock);
   /* USER CODE END USBD_STORAGE_Write */
 
   return status;
@@ -258,6 +262,9 @@ UINT USBD_STORAGE_Flush(VOID *storage_instance, ULONG lun, ULONG number_blocks,
   *                       callback return value.
   * @retval status
   */
+#define MEDIA_STATUS_OK           0u
+#define MEDIA_STATUS_NOT_PRESENT  1u
+
 UINT USBD_STORAGE_Status(VOID *storage_instance, ULONG lun, ULONG media_id,
                          ULONG *media_status)
 {
@@ -268,6 +275,14 @@ UINT USBD_STORAGE_Status(VOID *storage_instance, ULONG lun, ULONG media_id,
   UX_PARAMETER_NOT_USED(lun);
   UX_PARAMETER_NOT_USED(media_id);
   UX_PARAMETER_NOT_USED(media_status);
+  // 此函数在 MSC U盘挂载在windows时，会被一直定期调用
+  if (g_sd_medium_present == UX_FALSE)
+  {
+      *media_status = MEDIA_STATUS_NOT_PRESENT;
+      return UX_ERROR;
+  }
+
+  *media_status = MEDIA_STATUS_OK;
   /* USER CODE END USBD_STORAGE_Status */
 
   return status;

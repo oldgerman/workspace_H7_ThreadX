@@ -29,6 +29,7 @@
 /* USER CODE BEGIN Includes */
 #include "usb_otg.h"
 #include "ux_dcd_stm32.h"
+#include "ux_device_msc.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -60,14 +61,11 @@ static TX_THREAD ux_device_app_thread;
 /* 事件标志组 */
 TX_EVENT_FLAGS_GROUP EventFlagMsc;         //!< MSC     事件标志组
 TX_EVENT_FLAGS_GROUP EventFlagCdcAcm;      //!< CDC ACM 事件标志组
+
 /* 线程控制块 */
-//static TX_THREAD ux_cdc_acm_read_thread;  //!< CDC ACM 接收线程控制块
-//static TX_THREAD ux_cdc_acm_write_thread; //!< CDC ACM 发送线程控制块
-static TX_THREAD ux_cdc_acm_thread;        //!< CDC ACM 线程控制块
-static TX_THREAD ux_cdc_acm_test_thread;   //!< CDC ACM 测试线程控制块
-// 添加队列存储区定义（根据需求调整长度）
-#define USB_RECEIVE_QUEUE_LENGTH 8  // 队列可存储的消息数量（每个消息是ULONG类型）
-ULONG g_usb_queue_storage[USB_RECEIVE_QUEUE_LENGTH];  // 队列存储区（必须全局/静态）
+static TX_THREAD ux_cdc_acm_thread;            //!< CDC ACM 线程控制块
+static TX_THREAD ux_cdc_acm_cmd_parse_thread;  //!< CDC ACM 命令拆包解析线程控制块
+
 /* 参数绑定 */
 UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER cdc_acm_callback_parameter; //!< 参数绑定 CDC ACM 回调函数
 
@@ -268,38 +266,7 @@ UINT MX_USBX_Device_Init(VOID *memory_ptr)
   }
 
   /* USER CODE BEGIN MX_USBX_Device_Init1 */
-
-#if 0
-  /* Allocate the stack for usbx cdc acm read thread */
-  if (tx_byte_allocate(byte_pool, (VOID **) &pointer, UX_DEVICE_APP_THREAD_STACK_SIZE, TX_NO_WAIT) != TX_SUCCESS)
-  {
-    return TX_POOL_ERROR;
-  }
-
-  /* Create the usbx cdc acm read thread */
-  if (tx_thread_create(&ux_cdc_acm_read_thread, "cdc_acm_read_usbx_app_thread_entry",
-                       usbx_cdc_acm_read_thread_entry, 1, pointer,
-                       UX_DEVICE_APP_THREAD_STACK_SIZE, 20, 20, TX_NO_TIME_SLICE,
-                       TX_AUTO_START) != TX_SUCCESS)
-  {
-    return TX_THREAD_ERROR;
-  }
-
-  /* Allocate the stack for usbx cdc acm write thread */
-  if (tx_byte_allocate(byte_pool, (VOID **) &pointer, UX_DEVICE_APP_THREAD_STACK_SIZE, TX_NO_WAIT) != TX_SUCCESS)
-  {
-    return TX_POOL_ERROR;
-  }
-
-  /* Create the usbx_cdc_acm_write_thread_entry thread */
-  if (tx_thread_create(&ux_cdc_acm_write_thread, "cdc_acm_write_usbx_app_thread_entry",
-                       usbx_cdc_acm_write_thread_entry, 1, pointer,
-                       UX_DEVICE_APP_THREAD_STACK_SIZE, 20, 20, TX_NO_TIME_SLICE,
-                       TX_AUTO_START) != TX_SUCCESS)
-  {
-    return TX_THREAD_ERROR;
-  }
-#endif
+  /* 初始化 CDC 监视线程 */
   /* Allocate the stack for usbx cdc acm thread */
   ret = tx_byte_allocate(byte_pool, (VOID **) &pointer, UX_DEVICE_APP_THREAD_STACK_SIZE, TX_NO_WAIT);
   if (ret != TX_SUCCESS)
@@ -316,6 +283,7 @@ UINT MX_USBX_Device_Init(VOID *memory_ptr)
 	return TX_THREAD_ERROR;
   }
 
+  /* 初始化 CDC 命令拆包解析线程 */
   /* Allocate the stack for usbx cdc acm test thread */
   ret = tx_byte_allocate(byte_pool, (VOID **) &pointer, UX_DEVICE_APP_THREAD_STACK_SIZE, TX_NO_WAIT);
   if (ret != TX_SUCCESS)
@@ -323,8 +291,8 @@ UINT MX_USBX_Device_Init(VOID *memory_ptr)
     return TX_POOL_ERROR;
   }
   /* Create the usbx_cdc_acm_thread_entry thread */
-  ret = tx_thread_create(&ux_cdc_acm_test_thread, "cdc_acm_test_thread_entry",
-		  usbx_cdc_acm_test_thread_entry, 1, pointer,
+  ret = tx_thread_create(&ux_cdc_acm_cmd_parse_thread, "cdc_acm_cmd_parse_thread_entry",
+		  usbx_cdc_acm_cmd_parse_thread_entry, 1, pointer,
           UX_DEVICE_APP_THREAD_STACK_SIZE, 20, 20, TX_NO_TIME_SLICE,
           TX_AUTO_START);
   if (ret != TX_SUCCESS)
@@ -332,43 +300,18 @@ UINT MX_USBX_Device_Init(VOID *memory_ptr)
 	return TX_THREAD_ERROR;
   }
 
-  /* 首次启动 USBX MSC     释放事件标志组 */
-  if (tx_event_flags_create(&EventFlagMsc, "Event MSC Flag") != TX_SUCCESS)
-  {
-	  _Error_Handler(__FILE__, __LINE__);
-  }
-
-  // 创建队列：名称、存储区、消息大小（每个消息是 ULONG 类型）、队列长度
-  ret = tx_queue_create(
-      &g_usb_receive_queue,          // 队列控制块
-      "USB Receive Queue",           // 队列名称（调试用）
-      sizeof(ULONG),                 // 每个消息的大小（这里传递的是缓冲区地址，类型为 ULONG）
-      g_usb_queue_storage,           // 队列存储区（必须是静态/全局内存）
-      sizeof(g_usb_queue_storage)    // 存储区总大小（= 消息大小 × 队列长度）
-  );
-  if (ret != TX_SUCCESS) {
-	  _Error_Handler(__FILE__, __LINE__);
-  }
-
-  /* 首次启动 USBX CDC ACM 释放事件标志组 */
-  ret = tx_event_flags_create(&EventFlagCdcAcm, "Event CDC ACM Flag");
-  if (ret != UX_SUCCESS)
-  {
-	_Error_Handler(__FILE__, __LINE__);
-  }
-
-  /* Create the event flags group
-   * ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   * 已参考瑞萨 https://en-support.renesas.com/knowledgeBase/18870541 代码
-   * 转移到 USBD_STORAGE_Activate() 和 USBD_CDC_ACM_Activate()，方便使能或关闭
-   */
-
-
-  // 初始化 CDC 发送缓冲互斥锁
-  ret = tx_mutex_create(&g_cdc_tx_mutex, "CDC TX Mutex", TX_INHERIT);
+  /* 初始化 MSC 变量*/
+  ret = USBD_STORAGE_Pre_Init();
   if (ret != TX_SUCCESS)
   {
-      return TX_MUTEX_ERROR;
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+  /* 初始化 CDC 变量 */
+  ret = USBD_CDC_ACM_Pre_Init();
+  if (ret != TX_SUCCESS)
+  {
+	  _Error_Handler(__FILE__, __LINE__);
   }
 
   /* USER CODE END MX_USBX_Device_Init1 */
@@ -455,5 +398,86 @@ VOID USBX_APP_Device_Init(VOID)
   /* USER CODE END USB_Device_Init_PostTreatment */
 }
 
+UINT USBD_STORAGE_Pre_Init(VOID)
+{
+    UINT ret;
+
+    /* 首次启动 USBX MSC    初始化事件标志组 */
+    ret = tx_event_flags_create(&EventFlagMsc, "Event MSC Flag");
+    if (ret != TX_SUCCESS)
+    {
+      _Error_Handler(__FILE__, __LINE__);
+    }
+
+    /* 初始化 MSC互斥锁 */
+    ret = tx_mutex_create(&msc_state_mutex, "msc_state_mutex", TX_INHERIT);
+    if (ret != UX_SUCCESS)
+    {
+        _Error_Handler(__FILE__, __LINE__);
+    }
+
+    /* 初始化 MSC防重复注册锁 */
+    ret = tx_mutex_create(&sd_media_lock, "sd_media_lock", TX_INHERIT);
+    if (ret != UX_SUCCESS)
+    {
+        _Error_Handler(__FILE__, __LINE__);
+    }
+
+    return ret;
+}
+
+UINT USBX_MSC_Pause(VOID)
+{
+    UINT status = UX_SUCCESS;
+
+    tx_mutex_get(&msc_state_mutex, TX_WAIT_FOREVER);
+
+    if (msc_is_online == UX_FALSE)
+    {
+        tx_mutex_put(&msc_state_mutex);
+        return UX_SUCCESS;
+    }
+
+    /* 主动断开 USB 连接，避免主机继续访问 */
+//    ux_device_stack_disconnect();
+
+    status = ux_device_stack_class_unregister(_ux_system_slave_class_storage_name,
+                                              ux_device_class_storage_entry);
+    if (status == UX_SUCCESS)
+    {
+        msc_is_online = UX_FALSE;
+    }
+
+    tx_mutex_put(&msc_state_mutex);
+    return status;
+}
+
+UINT USBX_MSC_Resume(VOID)
+{
+    UINT status = UX_SUCCESS;
+
+    tx_mutex_get(&msc_state_mutex, TX_WAIT_FOREVER);
+
+    if (msc_is_online == UX_TRUE)
+    {
+        tx_mutex_put(&msc_state_mutex);
+        return UX_SUCCESS;
+    }
+
+    status = ux_device_stack_class_register(_ux_system_slave_class_storage_name,
+                                            ux_device_class_storage_entry,
+                                            storage_configuration_number,
+                                            storage_interface_number,
+                                            &storage_parameter);
+    if (status == UX_SUCCESS)
+    {
+        /* 重新“插入”设备让主机枚举 */
+//        ux_device_stack_connect();// ux_api.h只有声明没有
+        msc_is_online = UX_TRUE;
+    }
+
+    tx_mutex_put(&msc_state_mutex);
+    return status;
+}
 
 /* USER CODE END 2 */

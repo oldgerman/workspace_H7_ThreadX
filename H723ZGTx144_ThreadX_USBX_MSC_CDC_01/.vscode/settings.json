@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "ux_device_class_storage.h": "c",
+        "ux_device_msc.h": "c"
+    }
+}

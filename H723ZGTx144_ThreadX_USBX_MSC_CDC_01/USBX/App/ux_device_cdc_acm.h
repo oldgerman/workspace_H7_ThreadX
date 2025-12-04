@@ -65,10 +65,11 @@ VOID USBD_CDC_ACM_ParameterChange(VOID *cdc_acm_instance);
 /* USER CODE BEGIN EFP */
 UINT USBD_CDC_ACM_Read_Callback(struct UX_SLAVE_CLASS_CDC_ACM_STRUCT *cdc_acm, UINT status, UCHAR *data_pointer, ULONG length);
 UINT USBD_CDC_ACM_Write_Callback(struct UX_SLAVE_CLASS_CDC_ACM_STRUCT *cdc_acm, UINT status, ULONG length);
-//VOID usbx_cdc_acm_write_thread_entry(ULONG thread_input);
-//VOID usbx_cdc_acm_read_thread_entry(ULONG thread_input);
 void usbx_cdc_acm_thread_entry(ULONG thread_input);
-void usbx_cdc_acm_test_thread_entry(ULONG thread_input);
+//void usbx_cdc_acm_test_thread_entry(ULONG thread_input);
+void usbx_cdc_acm_cmd_parse_thread_entry(ULONG thread_input);
+UINT USBD_CDC_ACM_Pre_Init(VOID);
+
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
@@ -78,8 +79,6 @@ void usbx_cdc_acm_test_thread_entry(ULONG thread_input);
 
 /* USER CODE BEGIN 2 */
 /* Exported variables --------------------------------------------------------*/
-extern TX_MUTEX g_cdc_tx_mutex;
-extern TX_QUEUE g_usb_receive_queue;
 
 /* USER CODE END 2 */
 

@@ -48,13 +48,13 @@ extern "C" {
  * USBX_MEMORY_SIZE 就是 USBX_DEVICE_MEMORY_STACK_SIZE：
  * https://github.com/STMicroelectronics/STM32CubeH5/blob/188d908ee29667daf0ec2f1dd40bfc2e91389e5e/Projects/STM32H573I-DK/Applications/OpenBootloader/USBX/App/app_usbx_device.c#L25
  *   ↓ USBX_DEVICE_MEMORY_STACK_SIZE 30KB不够用，卡住在 ux_device_stack_class_register(_ux_system_slave_class_cdc_acm_name,
- *   ↓ 改为50K够用！
+ *   ↓ 改为40K够用！
  */
 
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
-#define USBX_DEVICE_MEMORY_STACK_SIZE       1024*50
+#define USBX_DEVICE_MEMORY_STACK_SIZE       1024*40
 
 #define UX_DEVICE_APP_THREAD_STACK_SIZE   4096
 #define UX_DEVICE_APP_THREAD_PRIO         10
@@ -73,6 +73,8 @@ UINT MX_USBX_Device_Init(VOID *memory_ptr);
 
 /* USER CODE BEGIN EFP */
 VOID USBX_APP_Device_Init(VOID);
+UINT USBX_MSC_Pause(VOID);
+UINT USBX_MSC_Resume(VOID);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/

@@ -1,6 +1,25 @@
 ## H723ZGTx144_ThreadX_USBX_MSC_CDC_01
 
-在 H723ZGTx144_ThreadX_USBX_MSC_02 的基础上修，加入 CDC 类，实现 USBX 复合设备，并重定向标准输入输出流到 USB CDC
+在 H723ZGTx144_ThreadX_USBX_MSC_02 的基础上修改，加入 CDC ACM 类，与 MSC 实现 USBX 复合设备，并重定向标准输入输出流到 USB CDC
+
+重写 _write() 函数，通过 USBX CDC ACM 发送数据，配合 USBX CDC ACM 内部线程 _ux_device_class_cdc_acm_bulkin_thread，为写请求阻塞 
+
+> `_ux_device_class_cdc_acm_bulkin_thread`是 USBX CDC ACM 的**专用写线程**，处理流程是：
+>
+> 1. 应用调用 ·_ux_device_class_cdc_acm_write_with_callback·
+>    - 设置`cdc_acm->ux_slave_class_cdc_acm_scheduled_write = UX_TRUE`；
+>    - 向线程发送`UX_DEVICE_CLASS_CDC_ACM_WRITE_EVENT`事件。
+> 2. 线程等待到事件后，处理数据发送；
+> 3. 发送完成后，**重置标志**`cdc_acm->ux_slave_class_cdc_acm_scheduled_write = UX_FALSE`；
+> 4. 最后调用回调函数`ux_device_class_cdc_acm_write_callback`（即你的`USBD_CDC_ACM_Write_Callback`）。
+>
+> 应用层`ascii_protocol.cpp`响应电脑下方的命令后，以连续`Respond()`发送字符串给电脑，这写`Respond()`是**同步调用**的，因此必须让`_write`函数**阻塞到当前请求的线程处理完成（直到标志重置）**，再返回，这样后续请求才会在 “标志为`UX_FALSE`” 的状态下发起。那么`_write`就必须为**严格同步阻塞模式**，确保前一个请求的线程处理完成后，再发起下一个请求。
+
+重写 _read() 函数，通过 USBX CDC ACM 获取数据，使用环形缓冲区，优势是 “缓存连续数据 + 支持按需拆包”，适配命令解析需求（按特定字符开头、提取参数、字符串查找），`OnAsciiCmd()`实现命令解析功能，**按 “命令结束符（\r\n）” 拆包**。
+
+实测 VOFA+ 以 1ms下发200条命令可以一一解析并发回响应字符串
+
+本工程 需要用 SD卡的格式为 FAT32，使用DiskGenius 默认FAT32 格式化就行，若使用 SD Card Formatter 格式化
 
 ## CubeMX：USBX配置
 
@@ -299,7 +318,7 @@ ST的USBX复合设备例程：HID 模拟鼠标设备 + CDC_ACM 转 UART 桥
 
 PS：还有一个 H735 的主机HID和CDC_ACM复合例程 Ux_Host_HID_CDC_ACM，以后要是用得上可以看看
 
-## printf 线程安全问题
+## printf / scanf 线程安全问题
 
 ### 方案一：在 printf 外面封装一个 App_Printf 加互斥锁（不推荐）
 
@@ -680,10 +699,6 @@ static void App_Printf(const char *fmt, ...)
 >
 >
 
-###  实际操作
-
-（采用方案二）
-
 之前问豆包的是基于UART的API 在 `_write`/`_read` 中加互斥锁，我这里需要使用 USB CDC 的API 
 
 注意到在 ux_device_class_cdc_acm.h 中有以下CDC Class API 可供调用
@@ -1003,11 +1018,237 @@ typedef struct UX_SLAVE_CLASS_CDC_ACM_STRUCT
 
 以上文章中 USBX 都是独立模式下运行，但 ThreadX + USBX 默认配置 UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE 是 ENABLE，相应的在代码中，C预处理器 ux_device_class_cdc_acm_write_callback()、ux_device_class_cdc_acm_read_callback() 这两个函数指针检测到没有定义UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE就被注释掉了，ThreadX会对USBX CDC ACM 设备类创建两个任务。直接是 _ux_device_class_cdc_acm_write_with_callback() 调用发送后发送事件标志组，任务\_ux_device_class_cdc_acm_bulkin_thread() 获取事件标志组
 
-#### 在RTOS下 也要使用 USBX 非阻塞收发 API
+## 在RTOS下使用 USBX 非阻塞收发API重定向\_write()和\_read()
 
-所以 USBX 在 RTOS 模式下就不需要修改CubeMX配置：`UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE` 从`ENABLE`改为 `DISABLE`不可取？
+### 结论（2025/2221）
 
-不对，有这篇文章：
+**在RTOS下 使用 USBX 非阻塞收发 API？**
+
+这个表述不正确，应该是使用了用户注册的回调函数：`USBD_CDC_ACM_Write_Callback`和`USBD_CDC_ACM_Read_Callback`
+
+**目前的实现方案：**
+
+修改CubeMX配置：`UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE` 从`ENABLE`改为 `DISABLE`
+
+发送数据的 API 改为调用 _ux_device_class_cdc_acm_write_with_callback，由 USBX 内部线程 _ux_device_class_cdc_acm_bulkin_thread 在发送完毕后调用用户注册的回调函数 USBD_CDC_ACM_Write_Callback，在回调函数中触发写完成事件：CDC_Write_Complete_Event，\_write函数阻塞等待 CDC_Write_Complete_Event 写完成事件
+
+接收数据的API 没有直接调用 `_ux_device_class_cdc_acm_read()`？
+
+`_ux_device_class_cdc_acm_read()` 是 USBX 提供的另一种数据读取方式（主动读取），当前代码采用了回调机制进行被动接收与环形缓冲区结合的方案：
+
+- 回调机制：数据到达后立即由底层线程`_ux_device_class_cdc_acm_bulkout_thread`触发调度`USBD_CDC_ACM_Read_Callback`处理，无需应用层主动轮询，适合实时性要求高的场景
+- 环形缓冲区：在回调函数`USBD_CDC_ACM_Read_Callback`临时存储数据，解决 “底层数据接收速度” 与 “应用层处理速度” 不匹配的问题（例如，应用层可能在处理前一条命令时，新的数据已到达）。
+
+### 步骤
+
+**RTOS 要想 CDC ACM 非阻塞发送，将 UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE  改为 DISABLE：**
+
+然后参考这个帖子：https://community.st.com/t5/stm32-mcus-products/stm32u5a5-usb-cdc-issue/td-p/641916
+
+> UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE 在 CubeMX中USBX 配置里默认是 ENABLE，意思是**禁用 USBX CDC ACM 类的「非阻塞（异步）传输」功能**，强制所有 CDC ACM 数据发送操作只能使用「阻塞（同步）模式」。
+>
+> ![](Images/USBX_MSC_CDC复合设备配置：03：UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE设置为DISABLE.png)
+
+之后让 CubeMX 生成一次代码，那么 `ux_device_class_cdc_acm.h` 的 `UX_SLAVE_CLASS_CDC_ACM` 结构体中，以下成员都变成可使用的状态：
+
+```c
+typedef struct UX_SLAVE_CLASS_CDC_ACM_STRUCT
+{
+......
+#ifndef UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE
+#if !defined(UX_DEVICE_STANDALONE)
+    UX_THREAD                           ux_slave_class_cdc_acm_bulkin_thread;
+    UX_THREAD                           ux_slave_class_cdc_acm_bulkout_thread;
+    UX_EVENT_FLAGS_GROUP                ux_slave_class_cdc_acm_event_flags_group;
+    UCHAR                               *ux_slave_class_cdc_acm_bulkin_thread_stack;
+    UCHAR                               *ux_slave_class_cdc_acm_bulkout_thread_stack;
+#endif
+    UINT                                (*ux_device_class_cdc_acm_write_callback)(struct UX_SLAVE_CLASS_CDC_ACM_STRUCT *cdc_acm, UINT status, ULONG length); //!< 发送完成后的回调函数
+    UINT                                (*ux_device_class_cdc_acm_read_callback)(struct UX_SLAVE_CLASS_CDC_ACM_STRUCT *cdc_acm, UINT status, UCHAR *data_pointer, ULONG length); //!< 接收完成后的回调函数
+    ULONG                               ux_slave_class_cdc_acm_transmission_status;
+    ULONG                               ux_slave_class_cdc_acm_scheduled_write;
+#if !defined(UX_DEVICE_STANDALONE)
+    ULONG                               ux_slave_class_cdc_acm_callback_total_length;
+    UCHAR                               *ux_slave_class_cdc_acm_callback_data_pointer;
+    UCHAR                               *ux_slave_class_cdc_acm_callback_current_data_pointer;
+#endif
+#endif
+} UX_SLAVE_CLASS_CDC_ACM;
+
+```
+
+其中 CDC 收发完成的回调函数指针 `ux_device_class_cdc_acm_write_callback` 和 `ux_device_class_cdc_acm_read_callback` 在 `ux_device_class_cdc_acm_ioctl.c` 中的 `_ux_device_class_cdc_acm_ioctl()` 中， 当传入参数 `ioctl_function` 为 `UX_SLAVE_CLASS_CDC_ACM_IOCTL_TRANSMISSION_START` 时，绑定传入的 `parameter` 参数
+
+```c
+UINT _ux_device_class_cdc_acm_ioctl(UX_SLAVE_CLASS_CDC_ACM *cdc_acm, ULONG ioctl_function,
+                                    VOID *parameter)
+{
+......
+    switch (ioctl_function)
+    {
+        ......  
+        case UX_SLAVE_CLASS_CDC_ACM_IOCTL_TRANSMISSION_START:
+            /* Properly cast the parameter pointer.  */
+            callback = (UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER *) parameter;
+
+            /* Save the callback function for write.  */
+            cdc_acm -> ux_device_class_cdc_acm_write_callback  = callback -> ux_device_class_cdc_acm_parameter_write_callback;
+
+            /* Save the callback function for read.  */
+            cdc_acm -> ux_device_class_cdc_acm_read_callback = callback -> ux_device_class_cdc_acm_parameter_read_callback;
+        ......
+    }
+......
+}
+```
+
+绑定回调函数的函数指针的在 UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER 结构体定义中有对应定义
+
+```c
+typedef struct UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER_STRUCT 
+{
+    UINT                                (*ux_device_class_cdc_acm_parameter_write_callback)(struct UX_SLAVE_CLASS_CDC_ACM_STRUCT *cdc_acm, UINT status, ULONG length);
+    UINT                                (*ux_device_class_cdc_acm_parameter_read_callback)(struct UX_SLAVE_CLASS_CDC_ACM_STRUCT *cdc_acm, UINT status, UCHAR *data_pointer, ULONG length);
+
+} UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER;
+```
+
+在 `ux_device_class_cdc_acm.h` 中宏 `ux_device_class_cdc_acm_ioctl` 定义为 `_ux_device_class_cdc_acm_ioctl`，因此实际要调用 `ux_device_class_cdc_acm_ioctl` 进行绑定回调函数操作
+
+```
+#define ux_device_class_cdc_acm_ioctl               _uxe_device_class_cdc_acm_ioctl
+```
+
+本工程在 USBD_CDC_ACM_Activate() 调用 _ux_device_class_cdc_acm_ioctl() 绑定自定义回调函数
+
+在 `_ux_device_class_cdc_acm_write_with_callback()` 中，通过发送事件组 `ux_slave_class_cdc_acm_event_flags_group` 来解除 BULK IN 线程的阻塞
+
+```c
+UINT _ux_device_class_cdc_acm_write_with_callback(UX_SLAVE_CLASS_CDC_ACM *cdc_acm, UCHAR *buffer,
+                                ULONG requested_length)
+{
+......
+    /* Invoke the bulkin thread by sending a flag .  */
+    status = _ux_device_event_flags_set(&cdc_acm -> ux_slave_class_cdc_acm_event_flags_group, UX_DEVICE_CLASS_CDC_ACM_WRITE_EVENT, UX_OR);
+......
+}
+```
+
+也就是说，在 `_ux_device_class_cdc_acm_bulkin_thread()` 中，需要获取事件组 `ux_slave_class_cdc_acm_event_flags_group` 解除阻塞
+
+本工程在 _write() 函数中调用 _ux_device_class_cdc_acm_write_with_callback() 发起写请求，这回使 _ux_device_class_cdc_acm_bulkin_thread() 调度一次
+
+bulkin 线程解除阻塞后，如果_ux_utility_event_flags_get()获取事件标注组ux_slave_class_cdc_acm_event_flags_group值为 `UX_SUCCESS`，则调用发送完成回调函数 `ux_device_class_cdc_acm_write_callback`
+
+```c
+VOID  _ux_device_class_cdc_acm_bulkin_thread(ULONG cdc_acm_class)
+{
+......
+    /* This thread runs forever but can be suspended or resumed.  */
+    while(1)
+    {
+...... // 第155行
+            /* Wait until we have a event sent by the application. */
+            status =  _ux_utility_event_flags_get(&cdc_acm -> ux_slave_class_cdc_acm_event_flags_group, UX_DEVICE_CLASS_CDC_ACM_WRITE_EVENT, UX_OR_CLEAR, &actual_flags, UX_WAIT_FOREVER);
+......
+            /* Check the completion code. */
+            if (status == UX_SUCCESS)
+            {
+...... // 第264行
+                /* Schedule of transmission was completed.  */
+                cdc_acm -> ux_slave_class_cdc_acm_scheduled_write = UX_FALSE;
+
+                /* We get here when the entire user data payload has been sent or if there is an error. */
+                /* If there is a callback defined by the application, send the transaction event to it.  */
+                if (cdc_acm -> ux_device_class_cdc_acm_write_callback != UX_NULL)
+
+                    /* Callback exists. */
+                    cdc_acm -> ux_device_class_cdc_acm_write_callback(cdc_acm, status, sent_length);
+
+                /* Now we return to wait for an event from the application or the user to stop the transmission.  */
+            }
+......
+}
+```
+
+调用 ux_device_class_cdc_acm_write_callback 即调用了用户自己绑定的回调函数 USBD_CDC_ACM_Write_Callback
+
+本工程在此回调函数中 将事件标志组 CDC_Write_Complete_Event 值修改为 TX_COMPLETE
+
+之后下一次执行的 _write() 函数就可以获取到这个事件，执行新一轮的发送
+
+**那么我需要在哪里写入绑定CDC类回调函数的代码呢？**
+
+注意到，在 `app_usbx_device.c` 的 `MX_USBX_Device_Init()` 中有将参数绑定 `UX_SLAVE_CLASS_CDC_ACM_PARAMETER` 结构体类型变量 `cdc_acm_parameter` 成员的代码，MSC类和CDC类都在此进行绑定参数
+
+```c
+......
+static UX_SLAVE_CLASS_STORAGE_PARAMETER storage_parameter; // MSC类参数
+static UX_SLAVE_CLASS_CDC_ACM_PARAMETER cdc_acm_parameter; // CDC类参数
+......
+UINT MX_USBX_Device_Init(VOID *memory_ptr)
+{
+......
+  /* Initialize the storage class parameters for reading/writing to the Flash Disk */
+  storage_parameter.ux_slave_class_storage_parameter_lun[0].
+    ux_slave_class_storage_media_last_lba = USBD_STORAGE_GetMediaLastLba();
+......
+  /* USER CODE BEGIN STORAGE_PARAMETER */
+  // 用户自定义MSC类的参数绑定代码
+  /* USER CODE END STORAGE_PARAMETER */
+......
+  /* Initialize the cdc acm class parameters for the device */
+  cdc_acm_parameter.ux_slave_class_cdc_acm_instance_activate   = USBD_CDC_ACM_Activate;
+  cdc_acm_parameter.ux_slave_class_cdc_acm_instance_deactivate = USBD_CDC_ACM_Deactivate;
+  cdc_acm_parameter.ux_slave_class_cdc_acm_parameter_change    = USBD_CDC_ACM_ParameterChange;
+    
+  /* USER CODE BEGIN CDC_ACM_PARAMETER */
+  // 用户自定义CDC类的参数绑定代码
+  /* USER CODE END CDC_ACM_PARAMETER */
+......
+}
+```
+
+`UX_SLAVE_CLASS_STORAGE_PARAMETER`、`UX_SLAVE_CLASS_CDC_ACM_PARAMETER` 结构体类型都在 `ux_device_class_cdc_acm.h` 定义，注意到上位提到的 `UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER`也在此定义，所以将绑定回调函数的代码在 `MX_USBX_Device_Init()` 的 `/* USER CODE BEGIN CDC_ACM_PARAMETER */` 和  `/* USER CODE END CDC_ACM_PARAMETER */` 之间写，并在此文件中定义一个 `UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER` 类型的静态变量
+
+```c
+......
+static UX_SLAVE_CLASS_STORAGE_PARAMETER storage_parameter; // MSC类参数
+static UX_SLAVE_CLASS_CDC_ACM_PARAMETER cdc_acm_parameter; // CDC类参数
+static UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER cdc_acm_callback_parameter; //!< 参数绑定 CDC ACM 回调函数
+......
+UINT MX_USBX_Device_Init(VOID *memory_ptr)
+{
+......
+  /* Initialize the storage class parameters for reading/writing to the Flash Disk */
+  storage_parameter.ux_slave_class_storage_parameter_lun[0].
+    ux_slave_class_storage_media_last_lba = USBD_STORAGE_GetMediaLastLba();
+......
+  /* USER CODE BEGIN STORAGE_PARAMETER */
+  // 用户自定义MSC类的参数绑定代码
+  /* USER CODE END STORAGE_PARAMETER */
+......
+  /* Initialize the cdc acm class parameters for the device */
+  cdc_acm_parameter.ux_slave_class_cdc_acm_instance_activate   = USBD_CDC_ACM_Activate;
+  cdc_acm_parameter.ux_slave_class_cdc_acm_instance_deactivate = USBD_CDC_ACM_Deactivate;
+  cdc_acm_parameter.ux_slave_class_cdc_acm_parameter_change    = USBD_CDC_ACM_ParameterChange;
+    
+  /* USER CODE BEGIN CDC_ACM_PARAMETER */
+  // 用户自定义CDC类的参数绑定代码
+  /* USER CODE END CDC_ACM_PARAMETER */
+......
+}
+```
+
+本工程已经将同步互斥对象、参数绑定代码统一写到 USBD_CDC_ACM_Pre_Init()，该函数在线程开始调度前就在 MX_USBX_Device_Init() 中执行
+
+注：
+
+`MX_USBX_Device_Init()` 被 `tx_application_define()` 中调用
+
+`tx_application_define()`  被 `_tx_initialize_kernel_enter()` 调用
+
+### 相关帖子
 
 [ST论坛：STM32U5A5 USB CDC 问题](https://community.st.com/t5/stm32-mcus-products/stm32u5a5-usb-cdc-issue/td-p/641916)
 
@@ -1597,201 +1838,106 @@ typedef struct UX_SLAVE_CLASS_CDC_ACM_STRUCT
 >
 > 瑞萨是出处
 
+## FIleX App 线程 与 USBX MSC 线程 对SD卡 文件系统的控制权争夺问题
 
+USB MSC 线程：
 
-**RTOS 要想 CDC ACM 非阻塞发送，将 UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE  改为 DISABLE：**
+需要释放占用
 
+```c
+UINT  _ux_device_class_storage_entry(UX_SLAVE_CLASS_COMMAND *command)
+{
+......
+    switch (command -> ux_slave_class_command_request)
+    {
+......
+    case UX_SLAVE_CLASS_COMMAND_ACTIVATE:
 
+        /* The activate command is used when the host has sent a SET_CONFIGURATION command
+           and this interface has to be mounted. Both Bulk endpoints have to be mounted
+           and the storage thread needs to be activated.  */
+        status =  _ux_device_class_storage_activate(command);
 
-然后参考这个帖子：https://community.st.com/t5/stm32-mcus-products/stm32u5a5-usb-cdc-issue/td-p/641916
+        /* Return the completion status.  */
+        return(status);
 
-> UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE 在 CubeMX中USBX 配置里默认是 ENABLE，意思是**禁用 USBX CDC ACM 类的「非阻塞（异步）传输」功能**，强制所有 CDC ACM 数据发送操作只能使用「阻塞（同步）模式」。
+    case UX_SLAVE_CLASS_COMMAND_DEACTIVATE:
+
+        /* The deactivate command is used when the device has been extracted.
+           The device endpoints have to be dismounted and the storage thread canceled.  */
+        status =  _ux_device_class_storage_deactivate(command);
+        
+        /* Return the completion status.  */
+        return(status);
+......
+}
+```
+
+我觉得问题就在于如何触发 USBD_STORAGE_Deactivate()这个函数，但是目前电脑右键弹出USBX MSC U 盘之后，U盘还在电脑上
+
+### 相关帖子
+
+[Microsoft论坛：USBX MSC + LVLX、USBD_STORAGE_Write 和 USBD_STORAGE_Read](https://learn.microsoft.com/en-us/answers/questions/5585847/usbx-msc-lvlx-usbd-storage-write-and-usbd-storage)
+
+> **关于你的另一个问题“如果FileX不能使用，我该如何将格式化的文件写入我的闪存？”**
 >
-> ![](Images/USBX_MSC_CDC复合设备配置：03：UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE设置为DISABLE.png)
+> 当用作 USB 大容量存储设备时，主机（Windows）是主控设备。它控制文件系统（FAT、exFAT 等）。
+>
+> 您的设备的**唯一**`USBD_STORAGE_Read`功能是通过和提供原始块级访问`USBD_STORAGE_Write`。您不能（也绝对不能）同时在设备上使用 FileX，因为这两个文件系统会立即相互损坏。如果您需要预先将文件加载到磁盘上，则必须：
+>
+> 1. 请先实现您的 FileX 代码。
+> 2. 在“首次启动”例程中，使用 FileX 打开介质，对其进行格式化，创建一个文件，向其中写入数据，然后关闭介质。
+> 3. 然后，取消初始化 FileX 并启动 USBX MSC 类，将控制权移交给主机。
 
-之后让 CubeMX 生成一次代码，那么 `ux_device_class_cdc_acm.h` 的 `UX_SLAVE_CLASS_CDC_ACM` 结构体中，以下成员都变成可使用的状态：
+[安富莱论坛：FileX+USBX_MSC_双边同步问题](https://forum.anfulai.cn/forum.php?mod=viewthread&tid=129472&page=1#pid346429)
 
-```c
-typedef struct UX_SLAVE_CLASS_CDC_ACM_STRUCT
-{
-......
-#ifndef UX_DEVICE_CLASS_CDC_ACM_TRANSMISSION_DISABLE
-#if !defined(UX_DEVICE_STANDALONE)
-    UX_THREAD                           ux_slave_class_cdc_acm_bulkin_thread;
-    UX_THREAD                           ux_slave_class_cdc_acm_bulkout_thread;
-    UX_EVENT_FLAGS_GROUP                ux_slave_class_cdc_acm_event_flags_group;
-    UCHAR                               *ux_slave_class_cdc_acm_bulkin_thread_stack;
-    UCHAR                               *ux_slave_class_cdc_acm_bulkout_thread_stack;
-#endif
-    UINT                                (*ux_device_class_cdc_acm_write_callback)(struct UX_SLAVE_CLASS_CDC_ACM_STRUCT *cdc_acm, UINT status, ULONG length); //!< 发送完成后的回调函数
-    UINT                                (*ux_device_class_cdc_acm_read_callback)(struct UX_SLAVE_CLASS_CDC_ACM_STRUCT *cdc_acm, UINT status, UCHAR *data_pointer, ULONG length); //!< 接收完成后的回调函数
-    ULONG                               ux_slave_class_cdc_acm_transmission_status;
-    ULONG                               ux_slave_class_cdc_acm_scheduled_write;
-#if !defined(UX_DEVICE_STANDALONE)
-    ULONG                               ux_slave_class_cdc_acm_callback_total_length;
-    UCHAR                               *ux_slave_class_cdc_acm_callback_data_pointer;
-    UCHAR                               *ux_slave_class_cdc_acm_callback_current_data_pointer;
-#endif
-#endif
-} UX_SLAVE_CLASS_CDC_ACM;
+> *发表于 2025-8-20 09:50:20* | [只看该作者](https://forum.anfulai.cn/forum.php?mod=viewthread&tid=129472&page=1&authorid=84914) |[倒序浏览](https://forum.anfulai.cn/forum.php?mod=viewthread&tid=129472&extra=&ordertype=1) |[阅读模式](javascript:;)
+>
+> [JasonChen](https://forum.anfulai.cn/home.php?mod=space&uid=84914)
+>
+> > 目前使用的存储介质是SD卡，进行**fx_media_format**格式化之后，可以被PC正常识别，写入读取都是正常的。 但是存在本地和PC端不同步的问题，比如在本地创建或写入文件，创建或写入后立即调用了**fx_media_flush**，本地已经生效，PC端也不会立即刷新出文件，需要重新枚举才能正常显示。 同样通过PC端写入文件，需要重新**fx_media_open**本地才能看到PC端上次写入的文件。  造成这样的现象，貌似是两边在维护不同的FAT表。请问有什么好的解决方法吗？
+> >
+> > 弃用MSC了，改为PIMA MTP，由设备端统一管理文件系统，可以完美兼容
+>
+> [eric2013](https://forum.anfulai.cn/home.php?mod=space&uid=58)：
+>
+> > 是的mtp是非常好的方案
+>
+> OldGerman：
+>
+> > 楼主非常感谢你提到PIMA，其实手机和电脑传文件就在用这个协议，但是我之前一直以为是MSC哈哈
+> >
+> > 我目前卡壳儿的情况和楼主非常相似，ThreadX USBX整了一个MSC和CDC ACM的复合设备，电脑可以读写SD卡，通过虚拟串口发送一个FileX 读写测速SD卡的命令，安富莱的测速例程也能跑完，但是这之后电脑就不能打开SD卡的任何文件了（点击后一直转圈），又过了一会儿windows就把USBX整个设备都卸载了，尝试了FileX读写测速期间仅取消注册USBX 复合设备中的MSC线程，测速完毕后重新注册线程，但情况依然，表现为电脑右键U盘弹出，U盘仍然在电脑上，感觉复合设备是不能热卸载和热重载其中的一个设备类的，wiki搜索了一下PIMA确实相比MSC优势很大，那么就换PIMA MTP开整
+> >
+> > ![MTP协议相比MSC协议的优势](Images/MTP协议相比MSC协议的优势.png)
+>
+> [walk](https://forum.anfulai.cn/home.php?mod=space&uid=20152)
+>
+> > mtp有demo吗，官方的demo怎么把默认目录下的文件罗列出来，没用文件夹的层次信息。
+>
+> [eric2013](https://forum.anfulai.cn/home.php?mod=space&uid=58)
+>
+> > 我们自己没做过，只有官方的那个Demo
 
-```
+### 结论
 
-其中 CDC 收发完成的回调函数指针 `ux_device_class_cdc_acm_write_callback` 和 `ux_device_class_cdc_acm_read_callback` 在 `ux_device_class_cdc_acm_ioctl.c` 中的 `_ux_device_class_cdc_acm_ioctl()` 中， 当传入参数 `ioctl_function` 为 `UX_SLAVE_CLASS_CDC_ACM_IOCTL_TRANSMISSION_START` 时，绑定传入的 `parameter` 参数
+放弃 MSC + CDC ACM 复合设备，换 MTP + CDC ACM 复合设备，此工程留作技术储备
 
-```c
-UINT _ux_device_class_cdc_acm_ioctl(UX_SLAVE_CLASS_CDC_ACM *cdc_acm, ULONG ioctl_function,
-                                    VOID *parameter)
-{
-......
-    switch (ioctl_function)
-    {
-        ......  
-        case UX_SLAVE_CLASS_CDC_ACM_IOCTL_TRANSMISSION_START:
-            /* Properly cast the parameter pointer.  */
-            callback = (UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER *) parameter;
+## Demo
 
-            /* Save the callback function for write.  */
-            cdc_acm -> ux_device_class_cdc_acm_write_callback  = callback -> ux_device_class_cdc_acm_parameter_write_callback;
+### 格式化SD卡
 
-            /* Save the callback function for read.  */
-            cdc_acm -> ux_device_class_cdc_acm_read_callback = callback -> ux_device_class_cdc_acm_parameter_read_callback;
-        ......
-    }
-......
-}
-```
+| ![20251204-200623：格式化期间比较慢](Images/20251204：格式化SD卡为FAT32或exFAT/20251204-200623：格式化期间比较慢.png) | ![20251204-200628：格式化成功并返回信息](Images/20251204：格式化SD卡为FAT32或exFAT/20251204-200628：格式化成功并返回信息.png) |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
+| Formatter将DiskGenius格式化的FAT32的SD卡格式化为exFAT        | Formatter将DiskGenius格式化的FAT32的SD卡格式化为exFAT        |
+| ![20251204-200712：格式化期间U盘会取消挂载，格式后会再次弹出U盘](Images/20251204：格式化SD卡为FAT32或exFAT/20251204-200712：格式化期间U盘会取消挂载，格式后会再次弹出U盘2.png) | ![20251204-200725：格式化为exFAT的信息](Images/20251204：格式化SD卡为FAT32或exFAT/20251204-200725：格式化为exFAT的信息2.png) |
+| 格式化期间U盘会取消挂载，格式后会再次弹出U盘                 | 格式化为exFAT的信息                                          |
+| ![20251204-201124：格式化之后测速就不能正常挂载exFAT文件系统了，之前的FAT32可以](Images/20251204：格式化SD卡为FAT32或exFAT/20251204-201124：格式化之后测速就不能正常挂载exFAT文件系统了，之前的FAT32可以.png) | ![20251204-201402：之后使用DiskGenius可以对exFAT格式为FAT32](Images/20251204：格式化SD卡为FAT32或exFAT/20251204-201402：之后使用DiskGenius可以对exFAT格式为FAT32.png) |
+| 格式化之后测速就不能正常挂载exFAT文件系统了，之前的FAT32可以 | 20251204-201402：之后使用DiskGenius可以对exFAT格式为FAT32    |
 
-绑定回调函数的函数指针的在 UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER 结构体定义中有对应定义
+FileX读写速度测试，1ms命令解析
 
-```c
-typedef struct UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER_STRUCT 
-{
-    UINT                                (*ux_device_class_cdc_acm_parameter_write_callback)(struct UX_SLAVE_CLASS_CDC_ACM_STRUCT *cdc_acm, UINT status, ULONG length);
-    UINT                                (*ux_device_class_cdc_acm_parameter_read_callback)(struct UX_SLAVE_CLASS_CDC_ACM_STRUCT *cdc_acm, UINT status, UCHAR *data_pointer, ULONG length);
+| ![20251204-2203：FileX读写速度测试（Og优化）](Images/20251204：Demo/20251204-2203：FileX读写速度测试（Og优化）.png) | ![测试1ms发送200次命令一一响应](Images/20251204：Demo/测试1ms发送200次命令一一响应.png) |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
+| FileX读写速度测试（Og优化）                                  | 测试1ms发送200次命令一一响应                                 |
 
-} UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER;
-```
-
-在 `ux_device_class_cdc_acm.h` 中宏 `ux_device_class_cdc_acm_ioctl` 定义为 `_ux_device_class_cdc_acm_ioctl`，因此实际要调用 `ux_device_class_cdc_acm_ioctl` 进行绑定回调函数操作
-
-```
-#define ux_device_class_cdc_acm_ioctl               _uxe_device_class_cdc_acm_ioctl
-```
-
-
-
-在 `_ux_device_class_cdc_acm_write_with_callback()` 中，通过发送事件组 `ux_slave_class_cdc_acm_event_flags_group` 来调用 BULK IN 线程
-
-```c
-UINT _ux_device_class_cdc_acm_write_with_callback(UX_SLAVE_CLASS_CDC_ACM *cdc_acm, UCHAR *buffer,
-                                ULONG requested_length)
-{
-......
-    /* Invoke the bulkin thread by sending a flag .  */
-    status = _ux_device_event_flags_set(&cdc_acm -> ux_slave_class_cdc_acm_event_flags_group, UX_DEVICE_CLASS_CDC_ACM_WRITE_EVENT, UX_OR);
-......
-}
-```
-
-在 `_ux_device_class_cdc_acm_bulkin_thread()` 中，需要获取事件组 `ux_slave_class_cdc_acm_event_flags_group` 解除阻塞
-
-解除阻塞后，如果获取事件的值的 `UX_SUCCESS`，则调用发送完成回调函数 `ux_device_class_cdc_acm_write_callback`
-
-```c
-VOID  _ux_device_class_cdc_acm_bulkin_thread(ULONG cdc_acm_class)
-{
-......
-    /* This thread runs forever but can be suspended or resumed.  */
-    while(1)
-    {
-...... // 第155行
-            /* Wait until we have a event sent by the application. */
-            status =  _ux_utility_event_flags_get(&cdc_acm -> ux_slave_class_cdc_acm_event_flags_group, UX_DEVICE_CLASS_CDC_ACM_WRITE_EVENT, UX_OR_CLEAR, &actual_flags, UX_WAIT_FOREVER);
-......
-            /* Check the completion code. */
-            if (status == UX_SUCCESS)
-            {
-...... // 第264行
-                /* Schedule of transmission was completed.  */
-                cdc_acm -> ux_slave_class_cdc_acm_scheduled_write = UX_FALSE;
-
-                /* We get here when the entire user data payload has been sent or if there is an error. */
-                /* If there is a callback defined by the application, send the transaction event to it.  */
-                if (cdc_acm -> ux_device_class_cdc_acm_write_callback != UX_NULL)
-
-                    /* Callback exists. */
-                    cdc_acm -> ux_device_class_cdc_acm_write_callback(cdc_acm, status, sent_length);
-
-                /* Now we return to wait for an event from the application or the user to stop the transmission.  */
-            }
-......
-}
-```
-
-**那么我需要在哪里写入绑定CDC类回调函数的代码呢？**
-
-注意到，在 `app_usbx_device.c` 的 `MX_USBX_Device_Init()` 中有将参数绑定 `UX_SLAVE_CLASS_CDC_ACM_PARAMETER` 结构体类型变量 `cdc_acm_parameter` 成员的代码，MSC类和CDC类都在此进行绑定参数
-
-```c
-......
-static UX_SLAVE_CLASS_STORAGE_PARAMETER storage_parameter; // MSC类参数
-static UX_SLAVE_CLASS_CDC_ACM_PARAMETER cdc_acm_parameter; // CDC类参数
-......
-UINT MX_USBX_Device_Init(VOID *memory_ptr)
-{
-......
-  /* Initialize the storage class parameters for reading/writing to the Flash Disk */
-  storage_parameter.ux_slave_class_storage_parameter_lun[0].
-    ux_slave_class_storage_media_last_lba = USBD_STORAGE_GetMediaLastLba();
-......
-  /* USER CODE BEGIN STORAGE_PARAMETER */
-  // 用户自定义MSC类的参数绑定代码
-  /* USER CODE END STORAGE_PARAMETER */
-......
-  /* Initialize the cdc acm class parameters for the device */
-  cdc_acm_parameter.ux_slave_class_cdc_acm_instance_activate   = USBD_CDC_ACM_Activate;
-  cdc_acm_parameter.ux_slave_class_cdc_acm_instance_deactivate = USBD_CDC_ACM_Deactivate;
-  cdc_acm_parameter.ux_slave_class_cdc_acm_parameter_change    = USBD_CDC_ACM_ParameterChange;
-    
-  /* USER CODE BEGIN CDC_ACM_PARAMETER */
-  // 用户自定义CDC类的参数绑定代码
-  /* USER CODE END CDC_ACM_PARAMETER */
-......
-}
-```
-
-`UX_SLAVE_CLASS_STORAGE_PARAMETER`、`UX_SLAVE_CLASS_CDC_ACM_PARAMETER` 结构体类型都在 `ux_device_class_cdc_acm.h` 定义，注意到上位提到的 `UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER`也在此定义，所以将绑定回调函数的代码在 `MX_USBX_Device_Init()` 的 `/* USER CODE BEGIN CDC_ACM_PARAMETER */` 和  `/* USER CODE END CDC_ACM_PARAMETER */` 之间写，并在此文件中定义一个 `UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER` 类型的静态变量
-
-```c
-......
-static UX_SLAVE_CLASS_STORAGE_PARAMETER storage_parameter; // MSC类参数
-static UX_SLAVE_CLASS_CDC_ACM_PARAMETER cdc_acm_parameter; // CDC类参数
-static UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER cdc_acm_callback_parameter; //!< 参数绑定 CDC ACM 回调函数
-......
-UINT MX_USBX_Device_Init(VOID *memory_ptr)
-{
-......
-  /* Initialize the storage class parameters for reading/writing to the Flash Disk */
-  storage_parameter.ux_slave_class_storage_parameter_lun[0].
-    ux_slave_class_storage_media_last_lba = USBD_STORAGE_GetMediaLastLba();
-......
-  /* USER CODE BEGIN STORAGE_PARAMETER */
-  // 用户自定义MSC类的参数绑定代码
-  /* USER CODE END STORAGE_PARAMETER */
-......
-  /* Initialize the cdc acm class parameters for the device */
-  cdc_acm_parameter.ux_slave_class_cdc_acm_instance_activate   = USBD_CDC_ACM_Activate;
-  cdc_acm_parameter.ux_slave_class_cdc_acm_instance_deactivate = USBD_CDC_ACM_Deactivate;
-  cdc_acm_parameter.ux_slave_class_cdc_acm_parameter_change    = USBD_CDC_ACM_ParameterChange;
-    
-  /* USER CODE BEGIN CDC_ACM_PARAMETER */
-  // 用户自定义CDC类的参数绑定代码
-  /* USER CODE END CDC_ACM_PARAMETER */
-......
-}
-```
-
-`MX_USBX_Device_Init()` 被 `tx_application_define()` 中调用
-
-`tx_application_define()`  被 `_tx_initialize_kernel_enter()` 调用

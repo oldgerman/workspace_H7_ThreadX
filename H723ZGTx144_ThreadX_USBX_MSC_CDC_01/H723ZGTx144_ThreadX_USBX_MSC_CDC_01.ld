@@ -48,7 +48,7 @@ MEMORY
   DTCMRAM  (xrw)   : ORIGIN = 0x20000400,   LENGTH = 127K   /* RAM_DTCM  */
   AXISRAM1 (xrw)   : ORIGIN = 0x24000000,   LENGTH = 64K   /* RAM_D1    */
   AXISRAM2 (xrw)   : ORIGIN = 0x24010000,   LENGTH = 256K    /* RAM_D1    */
-  SRAM1    (xrw)   : ORIGIN = 0x30000000,   LENGTH = 16K    /* RAM_D2    */
+  SRAM1    (xrw)   : ORIGIN = 0x30000000,   LENGTH = 32K    /* RAM_D2    */
   SRAM2    (xrw)   : ORIGIN = 0x30004000,   LENGTH = 16K    /* RAM_D2    */
   SRAM4    (xrw)   : ORIGIN = 0x38000000,   LENGTH = 16K    /* RAM_D3    */
   BKPRAM   (xrw)   : ORIGIN = 0x38800000,   LENGTH = 4K     /* RAM_D3    */
