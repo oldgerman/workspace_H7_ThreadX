@@ -19,7 +19,9 @@
 
 实测 VOFA+ 以 1ms下发200条命令可以一一解析并发回响应字符串
 
-本工程 需要用 SD卡的格式为 FAT32，使用DiskGenius 默认FAT32 格式化就行，若使用 SD Card Formatter 格式化
+本工程测试的SD卡是三星64G EVO，若需要使用测度函数，则SD卡需要格式化为 FAT32，使用DiskGenius 默认FAT32 格式化就行
+
+对于电脑端，不论使用 SD Card Formatter 格式化为 exFat，或者DiskGenius 默认FAT32 格式化，都可以识别SD卡并正常读写文件
 
 ## CubeMX：USBX配置
 
