@@ -1,4 +1,4 @@
-## H723ZGTx144_ThreadX_USBX_MSC_CDC_01
+## H723ZGTx144_ThreadX_USBX_PIMA_CDC_01
 
 在 H723ZGTx144_ThreadX_USBX_MSC_02 的基础上修改，加入 CDC ACM 类，与 MSC 实现 USBX 复合设备，并重定向标准输入输出流到 USB CDC
 
@@ -1937,7 +1937,7 @@ UINT  _ux_device_class_storage_entry(UX_SLAVE_CLASS_COMMAND *command)
 | ![20251204-201124：格式化之后测速就不能正常挂载exFAT文件系统了，之前的FAT32可以](Images/20251204：格式化SD卡为FAT32或exFAT/20251204-201124：格式化之后测速就不能正常挂载exFAT文件系统了，之前的FAT32可以.png) | ![20251204-201402：之后使用DiskGenius可以对exFAT格式为FAT32](Images/20251204：格式化SD卡为FAT32或exFAT/20251204-201402：之后使用DiskGenius可以对exFAT格式为FAT32.png) |
 | 格式化之后测速就不能正常挂载exFAT文件系统了，之前的FAT32可以 | 20251204-201402：之后使用DiskGenius可以对exFAT格式为FAT32    |
 
-### FileX读写速度测试，1ms命令解析
+FileX读写速度测试，1ms命令解析
 
 | ![20251204-2203：FileX读写速度测试（Og优化）](Images/20251204：Demo/20251204-2203：FileX读写速度测试（Og优化）.png) | ![测试1ms发送200次命令一一响应](Images/20251204：Demo/测试1ms发送200次命令一一响应.png) |
 | ------------------------------------------------------------ | ------------------------------------------------------------ |
