@@ -279,11 +279,20 @@ void initCommandRegistry() {
         // PSRAM_Test(OCTOSPI1_BASE); // 你测试函数
     }, "测试PSRAM"); // 补充描述
     registry.registerCommand('$', "TEST_SD_SPEED", [](const std::string&, StreamSink& response) {
-        Respond(response, false, "SD Speed Test started");
+        Respond(response, false, "开始SD卡速度测速");
     	fxSdTestSpeed();	/* SD卡速度测试 */
     }, "测试SD卡速度"); // 补充描述
-
-
+    registry.registerCommand('$', "USB_MSC_REENUM", [](const std::string&, StreamSink& response) {
+        Respond(response, false, "重新枚举USB MSC设备");
+        g_media_present = UX_FALSE; // PC 先弹出 U盘:
+        g_media_present = UX_TRUE; // 重新让电脑识别U盘
+        g_media_changed = UX_TRUE; //
+        printf("USB MSC 设备已重新枚举...\r\n");
+    }, "重新枚举USB MSC设备"); // 补充描述
+    registry.registerCommand('$', "RESET", [](const std::string&, StreamSink& response) {
+        Respond(response, false, "重启系统");
+        NVIC_SystemReset();
+    }, "重启系统"); // 补充描述
 
 
 }

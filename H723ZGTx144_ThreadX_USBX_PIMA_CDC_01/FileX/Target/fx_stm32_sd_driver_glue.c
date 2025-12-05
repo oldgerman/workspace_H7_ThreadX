@@ -176,10 +176,10 @@ void HAL_SD_TxCpltCallback(SD_HandleTypeDef *hsd)
   tx_semaphore_put(&sd_tx_semaphore);
 
   /* USER CODE BEGIN POST_TX_CMPLT */
-  if (tx_event_flags_set(&EventFlagMsc, SD_WRITE_FLAG, TX_OR) != TX_SUCCESS)
-  {
-    _Error_Handler(__FILE__, __LINE__);
-  }
+//  if (tx_event_flags_set(&EventFlagMsc, SD_WRITE_FLAG, TX_OR) != TX_SUCCESS)
+//  {
+//    _Error_Handler(__FILE__, __LINE__);
+//  }
   /* USER CODE END POST_TX_CMPLT */
 }
 
@@ -197,10 +197,10 @@ void HAL_SD_RxCpltCallback(SD_HandleTypeDef *hsd)
   tx_semaphore_put(&sd_rx_semaphore);
 
   /* USER CODE BEGIN POST_RX_CMPLT */
-  if (tx_event_flags_set(&EventFlagMsc, SD_READ_FLAG, TX_OR) != TX_SUCCESS)
-  {
-    _Error_Handler(__FILE__, __LINE__);
-  }
+//  if (tx_event_flags_set(&EventFlagMsc, SD_READ_FLAG, TX_OR) != TX_SUCCESS)
+//  {
+//    _Error_Handler(__FILE__, __LINE__);
+//  }
   /* USER CODE END POST_RX_CMPLT */
 }
 

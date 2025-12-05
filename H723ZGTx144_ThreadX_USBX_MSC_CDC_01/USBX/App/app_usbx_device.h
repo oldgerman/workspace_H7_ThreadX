@@ -75,6 +75,7 @@ UINT MX_USBX_Device_Init(VOID *memory_ptr);
 VOID USBX_APP_Device_Init(VOID);
 UINT USBX_MSC_Pause(VOID);
 UINT USBX_MSC_Resume(VOID);
+VOID USBX_Force_Reconnect(VOID);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/

@@ -408,47 +408,17 @@ UINT USBD_STORAGE_Pre_Init(VOID)
     {
       _Error_Handler(__FILE__, __LINE__);
     }
-
-    /* 初始化 MSC互斥锁 */
-    ret = tx_mutex_create(&msc_state_mutex, "msc_state_mutex", TX_INHERIT);
-    if (ret != UX_SUCCESS)
-    {
-        _Error_Handler(__FILE__, __LINE__);
-    }
-
-    /* 初始化 MSC防重复注册锁 */
-    ret = tx_mutex_create(&sd_media_lock, "sd_media_lock", TX_INHERIT);
-    if (ret != UX_SUCCESS)
-    {
-        _Error_Handler(__FILE__, __LINE__);
-    }
-
     return ret;
 }
+
 
 UINT USBX_MSC_Pause(VOID)
 {
     UINT status = UX_SUCCESS;
 
-    tx_mutex_get(&msc_state_mutex, TX_WAIT_FOREVER);
-
-    if (msc_is_online == UX_FALSE)
-    {
-        tx_mutex_put(&msc_state_mutex);
-        return UX_SUCCESS;
-    }
-
-    /* 主动断开 USB 连接，避免主机继续访问 */
-//    ux_device_stack_disconnect();
-
     status = ux_device_stack_class_unregister(_ux_system_slave_class_storage_name,
                                               ux_device_class_storage_entry);
-    if (status == UX_SUCCESS)
-    {
-        msc_is_online = UX_FALSE;
-    }
 
-    tx_mutex_put(&msc_state_mutex);
     return status;
 }
 
@@ -456,28 +426,31 @@ UINT USBX_MSC_Resume(VOID)
 {
     UINT status = UX_SUCCESS;
 
-    tx_mutex_get(&msc_state_mutex, TX_WAIT_FOREVER);
-
-    if (msc_is_online == UX_TRUE)
-    {
-        tx_mutex_put(&msc_state_mutex);
-        return UX_SUCCESS;
-    }
-
     status = ux_device_stack_class_register(_ux_system_slave_class_storage_name,
                                             ux_device_class_storage_entry,
                                             storage_configuration_number,
                                             storage_interface_number,
                                             &storage_parameter);
-    if (status == UX_SUCCESS)
-    {
-        /* 重新“插入”设备让主机枚举 */
-//        ux_device_stack_connect();// ux_api.h只有声明没有
-        msc_is_online = UX_TRUE;
-    }
 
-    tx_mutex_put(&msc_state_mutex);
     return status;
+}
+
+/**
+  * @brief  强制重新枚举 USB 设备（断开并重新连接）
+  *         注意：这会导致 CDC 也短暂断开，但会自动恢复
+  */
+VOID USBX_Force_Reconnect(VOID)
+{
+    extern PCD_HandleTypeDef hpcd_USB_OTG_HS;
+    
+    /* 停止 USB 设备 */
+    HAL_PCD_Stop(&hpcd_USB_OTG_HS);
+    
+    /* 等待主机检测到断开 */
+    tx_thread_sleep(200);  // 200 ticks，约 2 秒（假设 1 tick = 10ms）
+    
+    /* 重新启动 USB 设备 */
+    HAL_PCD_Start(&hpcd_USB_OTG_HS);
 }
 
 /* USER CODE END 2 */

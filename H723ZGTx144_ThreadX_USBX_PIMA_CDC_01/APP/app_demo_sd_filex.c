@@ -70,7 +70,7 @@
 /* Private variables ---------------------------------------------------------*/
 /* 测试所用静态内存 */
 __attribute__((section(".axisram2_bss"), aligned(32)))
-uint32_t media_memory[16*1024];
+static uint32_t media_memory[16*1024];
 //__attribute__((section(".psram_nold"), aligned(32)))
 //uint32_t media_memory[64*1024];
 ALIGN_32BYTES (char FsReadBuf[1024]);
@@ -82,7 +82,7 @@ ALIGN_32BYTES (char FsWriteBuf[1024]) = {"ThreadX FileX Write Demo \r\n www.armf
 //__attribute__((section(".sram1_bss"), aligned(32))) uint8_t g_TestBuf[BUF_SIZE];
 __attribute__((section (".psram_nold"), aligned(32))) uint8_t g_TestBuf[BUF_SIZE]; //SDMMC2 DMA 可以访问OCTOSPI PSRAM
 /* FileX相关变量 */
-FX_FILE      fx_file;
+static FX_FILE      fx_file;
 CHAR         entry_name[FX_MAX_LONG_NAME_LEN];
 
 /* Private function prototypes -----------------------------------------------*/

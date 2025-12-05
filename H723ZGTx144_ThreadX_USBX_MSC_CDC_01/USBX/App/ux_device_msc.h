@@ -74,10 +74,8 @@ ULONG USBD_STORAGE_GetMediaBlocklength(VOID);
 UINT USBD_STORAGE_Pre_Init(VOID);
 UINT USBX_MSC_Pause(VOID);
 UINT USBX_MSC_Resume(VOID);
-extern TX_MUTEX msc_state_mutex;
-extern TX_MUTEX sd_media_lock;
-extern UINT     msc_is_online;
-extern volatile UINT g_sd_medium_present;
+extern volatile UINT g_media_present;
+extern volatile UINT g_media_changed;
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/

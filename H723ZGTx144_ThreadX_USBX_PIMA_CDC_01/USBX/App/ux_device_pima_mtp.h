@@ -35,7 +35,7 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "app_filex.h"
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -50,7 +50,8 @@ extern "C" {
 
 /* Exported macro ------------------------------------------------------------*/
 /* USER CODE BEGIN EM */
-
+#define MAX_OBJECT_HANDLE_LEN 100U
+#define MAX_FILE_NAME         255U
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
@@ -136,11 +137,51 @@ ULONG USBD_MTP_StorageGetFreeSpaceHigh(VOID);
 ULONG USBD_MTP_StorageGetFreeSpaceImage(VOID);
 
 /* USER CODE BEGIN EFP */
-
+UINT MTP_GetObjectHandle(ULONG object_handle, UX_SLAVE_CLASS_PIMA_OBJECT **object);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+static const uint16_t DeviceDefaultValue[] = {'S', 'T', 'M', '3', '2', 0};
+static const uint16_t DeviceCurrentValue[] = {'S', 'T', 'M', '3', '2', ' ', 'V', '1', '.', '0', 0};
+static const uint16_t DefaultFileName[] = {'N','e','w',' ','F','o','l','d','e','r',0};
+
+#define DEFAULT_FILE_NAME_LEN    (uint8_t)(sizeof(DefaultFileName) / 2U)
+
+typedef struct
+{
+  uint16_t DevicePropertyCode;
+  uint16_t DataType;
+  uint8_t GetSet;
+  uint8_t DefaultValue_length;
+  uint16_t DefaultValue[sizeof(DeviceDefaultValue)/ 2U];
+  uint8_t CurrentValue_length;
+  uint16_t CurrentValue[sizeof(DeviceCurrentValue)/ 2U];
+  uint8_t FormFlag;
+}__PACKED MTP_DevicePropDescTypeDef;
+
+typedef struct
+{
+  ULONG ObjectHandle_len;
+  ULONG ObjectHandle[MAX_OBJECT_HANDLE_LEN];
+}MTP_ObjectHandleTypeDef;
+
+
+typedef struct
+{
+  uint16_t ObjectPropertyCode;
+  uint16_t DataType;
+  uint8_t GetSet;
+  uint8_t *DefValue;
+  uint32_t GroupCode;
+  uint8_t FormFlag;
+}MTP_ObjectPropDescTypeDef;
+
+typedef struct
+{
+  uint8_t FileName_len;
+  uint16_t FileName[MAX_FILE_NAME];
+} MTP_FileNameTypeDef;
 
 /* USER CODE END PD */
 

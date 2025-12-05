@@ -100,7 +100,7 @@ UINT USBX_MSC_Resume(VOID);
 
 /* USER CODE BEGIN 2 */
 /* Exported variables --------------------------------------------------------*/
-extern TX_EVENT_FLAGS_GROUP EventFlagMsc;
+//extern TX_EVENT_FLAGS_GROUP EventFlagMsc;
 extern TX_EVENT_FLAGS_GROUP EventFlagCdcAcm;
 extern UX_SLAVE_CLASS_CDC_ACM_CALLBACK_PARAMETER cdc_acm_callback_parameter;
 

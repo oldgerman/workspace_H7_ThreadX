@@ -62,7 +62,7 @@ extern USHORT USBD_MTP_ObjectPropSupported[];
 
 /* USER CODE BEGIN PV */
 /* 事件标志组 */
-TX_EVENT_FLAGS_GROUP EventFlagMsc;         //!< MSC     事件标志组
+//TX_EVENT_FLAGS_GROUP EventFlagMsc;         //!< MSC     事件标志组
 TX_EVENT_FLAGS_GROUP EventFlagCdcAcm;      //!< CDC ACM 事件标志组
 
 /* 线程控制块 */
@@ -395,11 +395,17 @@ VOID USBX_APP_Device_Init(VOID)
   HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 2, USBD_CDCACM_EPIN_HS_MPS / 4);    //!< 端点号2： 大小：0x100 字：CDCACM_ENDPOINT_IN / OUT FIFO
 
   // PIMA 端点 FIFO 配置
+//  /* Set Tx FIFO 3 to 256 words (1KB) for Bulk IN endpoint */
+//  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 3, USBD_PIMA_EPIN_HS_MPS / 4);       //!< 端点号3 ：大小：0x100 字：PIMA_ENDPOINT_IN / OUT FIFO
+//
+//  /* Set Tx FIFO 4 */
+//  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 4, USBD_PIMA_EPINCMD_HS_MPS / 4);    //!< 端点号4： 大小：0x2   字：PIMA CMD FIFO
+//
   /* Set Tx FIFO 3 to 256 words (1KB) for Bulk IN endpoint */
-  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 3, USBD_PIMA_EPIN_HS_MPS / 4);       //!< 端点号3 ：大小：0x100 字：PIMA_ENDPOINT_IN / OUT FIFO
+  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 3, 0x140);       //!< 端点号3 ：大小：0x100 字：PIMA_ENDPOINT_IN / OUT FIFO
 
   /* Set Tx FIFO 4 */
-  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 4, USBD_PIMA_EPINCMD_HS_MPS / 4);    //!< 端点号4： 大小：0x2   字：PIMA CMD FIFO
+  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 4, 0x20);    //!< 端点号4： 大小：0x2   字：PIMA CMD FIFO
 
 
 
@@ -419,14 +425,14 @@ VOID USBX_APP_Device_Init(VOID)
 
 UINT FileX_Pre_Init(VOID)
 {
-    UINT ret;
+    UINT ret = UX_SUCCESS;
 
     /* 首次启动 USBX MSC    初始化事件标志组 */
-    ret = tx_event_flags_create(&EventFlagMsc, "Event MSC Flag");
-    if (ret != TX_SUCCESS)
-    {
-      _Error_Handler(__FILE__, __LINE__);
-    }
+//    ret = tx_event_flags_create(&EventFlagMsc, "Event MSC Flag");
+//    if (ret != TX_SUCCESS)
+//    {
+//      _Error_Handler(__FILE__, __LINE__);
+//    }
 
     return ret;
 }
