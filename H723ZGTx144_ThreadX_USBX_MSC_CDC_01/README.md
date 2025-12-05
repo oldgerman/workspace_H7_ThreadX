@@ -1996,7 +1996,17 @@ UINT  _ux_device_class_storage_entry(UX_SLAVE_CLASS_COMMAND *command)
 
 参考安富莱论坛帖子实现FileX打印目录树
 
+## BUG
 
+windows删除Speed.txt文件夹后，发送命令测试SD卡速度（首次可能成功测试，但第二次一定不成功），可能会报文件系统失败
+
+```
+[00:47:04.918] $TEST_SD_SPEED
+[00:47:04.921] 开始SD卡速度测速
+[00:47:14.921] 挂载文件系统失败 -- 144
+```
+
+之后发送命令无反应，USBX复合设备被win11卸载
 
 ## 注
 
