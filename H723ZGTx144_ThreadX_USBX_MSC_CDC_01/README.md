@@ -2070,6 +2070,173 @@ windows删除Speed.txt文件夹后，发送命令测试SD卡速度（首次可�
 
 解决方案：是设备执行 fxSdTestSpeed() 的 g_media_present = UX_FALSE; // 通知 PC 弹出 U盘后，USBD_STORAGE_Status() 还未立即调度，需要让其检测到  g_media_present = UX_FALSE 后返回事件标记，让fxSdTestSpeed() 执行 g_media_present = UX_FALSE; 后阻塞等待这个事件标记后再开始测速
 
+## 待优化
+
+USBX 调用 USBD_STORAGE_Read 和 USBD_STORAGE_Write 时，每次似乎只读写512字节大小，这会导致 无法进行批量传输，SD卡读写速度慢，能不能通过添加读写 FIFO 来加大每次读写SD卡的数据总大小
+
+USBD_STORAGE_Read、USBD_STORAGE_Write 会调用 SDMMC 读写函数，先记录参数 number_blocks 的历史最大值和最小值 ，使用10MB以上的单文件测试：
+
+```c
+HAL_SD_WriteBlocks_DMA(&hsd2, data_pointer, lba, number_blocks); // 最大 4
+HAL_SD_ReadBlocks_DMA(&hsd2, data_pointer, lba, number_blocks); // 最大 4
+```
+
+而 fxSpeedTest() 调用fx_file_write()，调用 fx_stm32_sd_write_blocks()，调用HAL_SD_WriteBlocks_DMA()时，number_blocks是64
+
+fxSpeedTest()调用到的fx函数调用到 fx_stm32_sd_read_blocks，调用HAL_SD_ReadBlocks_DMA()时，前几次number_blocks是1，后面几次都是64
+
+通过现场表达式查看测试SD卡的信息，其BlockSize为512字节
+
+![20251206-151108：所测试SD卡的信息](Images/20251206：主机进行SD卡读写时的块个数/20251206-151108：所测试SD卡的信息.png)
+
+跟踪源码：USBD_STORAGE_Write 注册为 ux_slave_class_storage_media_write
+
+```c
+UINT MX_USBX_Device_Init(VOID *memory_ptr)
+{
+......
+   storage_parameter.ux_slave_class_storage_parameter_lun[0].ux_slave_class_storage_media_write = USBD_STORAGE_Write;
+......
+```
+
+只有 _ux_device_class_storage_write 调用了 ux_slave_class_storage_media_write
+
+```c
+UINT  _ux_device_class_storage_write(UX_SLAVE_CLASS_STORAGE *storage, ULONG lun, 
+                                    UX_SLAVE_ENDPOINT *endpoint_in,
+                                    UX_SLAVE_ENDPOINT *endpoint_out, UCHAR * cbwcb, UCHAR scsi_command)
+{
+......
+        /* Compute the number of blocks to transfer.  */
+        number_blocks = transfer_length / storage -> ux_slave_class_storage_lun[lun].ux_slave_class_storage_media_block_length;
+        
+        /* Execute the write command to the local media.  */
+        status =  storage -> ux_slave_class_storage_lun[lun].ux_slave_class_storage_media_write(storage, lun, transfer_request -> ux_slave_transfer_request_data_pointer, number_blocks, lba, &media_status);
+    
+```
+
+number_blocks 是由表达式 `transfer_length / storage -> ux_slave_class_storage_lun[lun].ux_slave_class_storage_media_block_length` 计算出的
+
+其中 ux_slave_class_storage_media_block_length 等于 USBD_STORAGE_GetMediaBlocklength() 的返回值，就是 USBD_SD_CardInfo.BlockSize，即512
+
+```
+  storage_parameter.ux_slave_class_storage_parameter_lun[0].
+    ux_slave_class_storage_media_block_length = USBD_STORAGE_GetMediaBlocklength();
+
+```
+
+那么限制就是这个transfer_length 了，由于计算的 number_blocks 是4，那么 transfer_length  就是2048，跟踪一下，好家伙，原来total_length 被 UX_SLAVE_CLASS_STORAGE_BUFFER_SIZE 的大小 2048限制了！
+
+```c
+UINT  _ux_device_class_storage_write(UX_SLAVE_CLASS_STORAGE *storage, ULONG lun, 
+                                    UX_SLAVE_ENDPOINT *endpoint_in,
+                                    UX_SLAVE_ENDPOINT *endpoint_out, UCHAR * cbwcb, UCHAR scsi_command)
+{
+......
+    while (total_length)
+    {
+
+        /* How much can we receive in this transfer?  */
+        if (total_length > UX_SLAVE_CLASS_STORAGE_BUFFER_SIZE)
+            transfer_length =  UX_SLAVE_CLASS_STORAGE_BUFFER_SIZE;
+        else
+            transfer_length =  total_length;
+        
+        /* Get the data payload from the host.  */
+        status =  _ux_device_stack_transfer_request(transfer_request, transfer_length, transfer_length);
+```
+
+在 ux_device_class_storage.h 中 UX_SLAVE_CLASS_STORAGE_BUFFER_SIZE 被定义为 UX_SLAVE_REQUEST_DATA_MAX_LENGTH
+
+```c
+/* Define buffer length for IN/OUT pipes.  This should match the size of the endpoint maximum buffer size. */
+
+#define UX_SLAVE_CLASS_STORAGE_BUFFER_SIZE                              UX_SLAVE_REQUEST_DATA_MAX_LENGTH
+```
+
+在 ux_user_samples.c（这个文件只是参考，实际编译是不会用到）中，UX_SLAVE_REQUEST_DATA_MAX_LENGTH 介绍如下：
+
+
+```c
+/* Defined, this value represents the maximum number of bytes that can be received or transmitted
+   on any endpoint. This value cannot be less than the maximum packet size of any endpoint. The default 
+   is 4096 bytes but can be reduced in memory constrained environments. For cd-rom support in the storage 
+   class, this value cannot be less than 2048.  */
+
+#define UX_SLAVE_REQUEST_DATA_MAX_LENGTH    (1024 * 2)
+```
+
+编译使用的 **UX_SLAVE_REQUEST_DATA_MAX_LENGTH** 默认是 2048，在ux_port.h中，该值**可在CubeMX中修改**
+
+这个buffer空间从哪里分配？当前工程 UX_DEVICE_ENDPOINT_BUFFER_OWNER 是0，那么在_ux_device_stack_initialize中从ThreadX字节池分配，**UX_DEVICE_ENDPOINT_BUFFER_OWNER** 同样支持在CubeMX中修改
+
+```c
+UINT  _ux_device_stack_initialize(UCHAR * device_framework_high_speed, ULONG device_framework_length_high_speed,
+                                  UCHAR * device_framework_full_speed, ULONG device_framework_length_full_speed,
+                                  UCHAR * string_framework, ULONG string_framework_length,
+                                  UCHAR * language_id_framework, ULONG language_id_framework_length,
+                                  UINT (*ux_system_slave_change_function)(ULONG))
+{
+......
+#if UX_DEVICE_ENDPOINT_BUFFER_OWNER == 0
+
+                /* Obtain some memory.  */
+                endpoints_pool -> ux_slave_endpoint_transfer_request.ux_slave_transfer_request_data_pointer = 
+                                _ux_utility_memory_allocate(UX_NO_ALIGN, UX_CACHE_SAFE_MEMORY, UX_SLAVE_REQUEST_DATA_MAX_LENGTH);
+                                                                                             //^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+                /* Ensure we could allocate memory.  */
+                if (endpoints_pool -> ux_slave_endpoint_transfer_request.ux_slave_transfer_request_data_pointer == UX_NULL)
+                {
+                    status = UX_MEMORY_INSUFFICIENT;
+                    break;
+                }
+#endif
+......
+```
+
+根据断点信息查看current_ptr的地址，知道_ux_utility_memory_allocate函数从USBX栈分配内存，若在CubeMX中定义了 **UX_ENFORCE_SAFE_ALIGNMENT**，可以支持指定对齐字节分配内存区
+
+UX_DEVICE_APP_MEM_POOL_SIZE
+
+USBX_DEVICE_MEMORY_STACK_SIZE
+
+测试：**UX_SLAVE_REQUEST_DATA_MAX_LENGTH**修改为 32KB大小试试
+
+```
+#define UX_SLAVE_REQUEST_DATA_MAX_LENGTH                    (1024*8)
+```
+
+![20251206-161919：加大端点BUFFER为32KB时USBX初始化出现UX_MEMORY_INSUFFICIENT错误 ](Images/20251206：主机进行SD卡读写时的块个数/20251206-161919：加大端点BUFFER为32KB时USBX初始化出现UX_MEMORY_INSUFFICIENT错误 .png)
+
+报一样的错：[[ThreadX全家桶\]](https://forum.anfulai.cn/forum.php?mod=forumdisplay&fid=12&filter=typeid&typeid=304) **USBX初始化出现UX_MEMORY_INSUFFICIENT错误** 
+
+原因是内存不足了
+
+8KB是94248，相比4KB增加了30KB
+
+![20251206-164828.png：字节池大小，1024x8字节端点读写缓冲区](Images/20251206：主机进行SD卡读写时的块个数/20251206-164828.png：字节池大小，1024x8字节端点读写缓冲区.png)
+
+4KB是63528，相比2KB增加了10KB
+
+![20251206-164148：字节池大小，1024x4字节端点读写缓冲区](Images/20251206：主机进行SD卡读写时的块个数/20251206-164148：字节池大小，1024x4字节端点读写缓冲区.png)
+
+2KB是53288KB
+
+![20251206-163148：字节池大小，1024x2字节端点读写缓冲区](Images/20251206：主机进行SD卡读写时的块个数/20251206-163148：字节池大小，1024x2字节端点读写缓冲区.png)
+
+这就比较迷糊了，2KB、4KB、8KB缓冲，对于USB字节池的大小居然不是线性增加的
+
+16KB的话我的内部内存就不够用了，先用4KB和8KB测试：
+
+缓冲区 2KB（1024x2）的读速度约3MB/s，写速度约1.5MB/s，4KB（Og）和8KB（Os）测试如下
+
+| ![20251206-164148：1024x4从U盘复制到电脑](Images/20251206：主机进行SD卡读写时的块个数/20251206-164148：1024x4从U盘复制到电脑.png) | ![20251206-164354：1024x4从电脑复制到U盘](Images/20251206：主机进行SD卡读写时的块个数/20251206-164354：1024x4从电脑复制到U盘.png) |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
+| 1024x4从U盘复制到电脑                                        | 1024x4从电脑复制到U盘                                        |
+| ![20251206-170504：1024x8从U盘复制到电脑](Images/20251206：主机进行SD卡读写时的块个数/20251206-170504：1024x8从U盘复制到电脑.png) | ![20251206-172204：1024x8从电脑复制到U盘](Images/20251206：主机进行SD卡读写时的块个数/20251206-172204：1024x8从电脑复制到U盘.png) |
+| 1024x8从U盘复制到电脑                                        | 1024x8从电脑复制到U盘                                        |
+
 ## 注
 
 ### CubeMX：USBX Device Register Connection Callback：Disable

@@ -91,6 +91,11 @@ uint32_t cnt_USBD_STORAGE_GetBlockLength = 0;
 uint8_t called_USBD_STORAGE_Status = 0;
 /* USBD_STORAGE_Flush向FileX返回介质变更标记 */
 uint8_t called_USBD_STORAGE_Flush = 0;
+/* 记录SD DMA读写函数参数 number_blocks 的历史最大值和最小值 */
+ULONG sd_read_blocks_max;
+ULONG sd_read_blocks_min;
+ULONG sd_write_blocks_max;
+ULONG sd_write_blocks_min;
 /* USER CODE END 0 */
 
 /**
@@ -167,6 +172,17 @@ UINT USBD_STORAGE_Read(VOID *storage_instance, ULONG lun, UCHAR *data_pointer,
     *media_status = UX_DEVICE_CLASS_STORAGE_SENSE_STATUS(0x03, 0x11, 0x00);
     return UX_ERROR;
   }
+  /* 记录number_blocks历史最大值和最小值 */
+  // 更新最大值
+  if (number_blocks > sd_read_blocks_max)
+  {
+	  sd_read_blocks_max = number_blocks;
+  }
+  // 更新最小值
+  if (number_blocks < sd_read_blocks_min)
+  {
+      sd_read_blocks_min = number_blocks;
+  }
 
 // 不需要缓存维护API，访问的是AXISRAM2区域
 #if (FX_STM32_SD_CACHE_MAINTENANCE == 1)
@@ -239,6 +255,17 @@ UINT USBD_STORAGE_Write(VOID *storage_instance, ULONG lun, UCHAR *data_pointer,
     return UX_ERROR;
   }
 
+  /* 记录number_blocks历史最大值和最小值 */
+  // 更新最大值
+  if (number_blocks > sd_write_blocks_max)
+  {
+      sd_write_blocks_max = number_blocks;
+  }
+  // 更新最小值
+  if (number_blocks < sd_write_blocks_min)
+  {
+      sd_write_blocks_min = number_blocks;
+  }
   /* Wait on writeflag until SD card is ready to use for new operation */
   if (tx_event_flags_get(&EventFlagMsc, SD_WRITE_FLAG, TX_OR_CLEAR, &WriteFlags,
                          TX_WAIT_FOREVER) != TX_SUCCESS) {
