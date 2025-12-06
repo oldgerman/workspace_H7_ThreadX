@@ -72,10 +72,25 @@ static int32_t check_sd_status(VOID);
 /* USER CODE BEGIN 0 */
 volatile UINT g_media_present = UX_TRUE;  // 介质已移除的标志
 volatile UINT g_media_changed = UX_FALSE; // 介质已变更（只报一次）
-volatile UINT g_media_changed_count =
-    0U; // 介质变更通知计数（让 Windows 多次收到 UNIT ATTENTION）
+volatile UINT g_media_changed_count = 0U; // 介质变更通知计数（让 Windows 多次收到 UNIT ATTENTION）
 
 VOID ux_app_msc_media_eject(VOID) { g_media_present = UX_FALSE; }
+
+/* DEBUG监视变量 */
+/* 统计四个USBD函数被调用次数，CubeIDE 现场表达式可实时刷新 */
+uint32_t cnt_USBD_STORAGE_Activate = 0;
+uint32_t cnt_USBD_STORAGE_Deactivate = 0;
+uint32_t cnt_USBD_STORAGE_Read = 0;
+uint32_t cnt_USBD_STORAGE_Write = 0;
+uint32_t cnt_USBD_STORAGE_Flush = 0;
+uint32_t cnt_USBD_STORAGE_Status = 0;
+uint32_t cnt_USBD_STORAGE_Notification = 0;
+uint32_t cnt_USBD_STORAGE_GetMediaLastLba = 0;
+uint32_t cnt_USBD_STORAGE_GetBlockLength = 0;
+/* USBD_STORAGE_Status向win11返回介质变更标记 */
+uint8_t called_USBD_STORAGE_Status = 0;
+/* USBD_STORAGE_Flush向FileX返回介质变更标记 */
+uint8_t called_USBD_STORAGE_Flush = 0;
 /* USER CODE END 0 */
 
 /**
@@ -87,7 +102,7 @@ VOID ux_app_msc_media_eject(VOID) { g_media_present = UX_FALSE; }
 VOID USBD_STORAGE_Activate(VOID *storage_instance) {
   /* USER CODE BEGIN USBD_STORAGE_Activate */
   UX_PARAMETER_NOT_USED(storage_instance);
-
+  cnt_USBD_STORAGE_Activate++;
   /* USER CODE END USBD_STORAGE_Activate */
 
   return;
@@ -102,6 +117,7 @@ VOID USBD_STORAGE_Activate(VOID *storage_instance) {
 VOID USBD_STORAGE_Deactivate(VOID *storage_instance) {
   /* USER CODE BEGIN USBD_STORAGE_Desactivate */
   UX_PARAMETER_NOT_USED(storage_instance);
+  cnt_USBD_STORAGE_Deactivate++;
   /* USER CODE END USBD_STORAGE_Desactivate */
 
   return;
@@ -129,24 +145,7 @@ UINT USBD_STORAGE_Read(VOID *storage_instance, ULONG lun, UCHAR *data_pointer,
   UX_PARAMETER_NOT_USED(lun);
   UX_PARAMETER_NOT_USED(media_status);
 
-  // 介质已移除状态：返回“成功但带错误感知”
-  if (g_media_present == UX_FALSE) {
-    // 填标准 SENSE：NOT READY / MEDIUM NOT PRESENT
-    *media_status = UX_DEVICE_CLASS_STORAGE_SENSE_STATUS(0x02, 0x3A, 0x00);
-    return UX_ERROR; // 返回成功，避免上层 STALL
-  }
-  if (g_media_changed == UX_TRUE) {
-    *media_status = UX_DEVICE_CLASS_STORAGE_SENSE_STATUS(0x06, 0x28, 0x00);
-    // 让 Windows 收到多次 UNIT ATTENTION 才清除标志，确保它重读 FAT
-    g_media_changed_count++;
-    if (g_media_changed_count >= 3) { // 返回 3 次后清除
-      g_media_changed = UX_FALSE;
-      g_media_changed_count = 0U;
-    }
-    return UX_ERROR;
-  }
-
-  // 介质未移除状态
+  cnt_USBD_STORAGE_Read++;
 
   ULONG ReadFlags = 0U;
 
@@ -210,24 +209,8 @@ UINT USBD_STORAGE_Write(VOID *storage_instance, ULONG lun, UCHAR *data_pointer,
   UX_PARAMETER_NOT_USED(lun);
   UX_PARAMETER_NOT_USED(media_status);
 
-  // 介质已移除状态：返回“成功但带错误感知”
-  if (g_media_present == UX_FALSE) {
-    // 填标准 SENSE：NOT READY / MEDIUM NOT PRESENT
-    *media_status = UX_DEVICE_CLASS_STORAGE_SENSE_STATUS(0x02, 0x3A, 0x00);
-    return UX_ERROR; // 返回成功，避免上层 STALL
-  }
-  if (g_media_changed == UX_TRUE) {
-    *media_status = UX_DEVICE_CLASS_STORAGE_SENSE_STATUS(0x06, 0x28, 0x00);
-    // 让 Windows 收到多次 UNIT ATTENTION 才清除标志，确保它重读 FAT
-    g_media_changed_count++;
-    if (g_media_changed_count >= 3) { // 返回 3 次后清除
-      g_media_changed = UX_FALSE;
-      g_media_changed_count = 0U;
-    }
-    return UX_ERROR;
-  }
+  cnt_USBD_STORAGE_Write++;
 
-  // 介质未移除状态
   ULONG WriteFlags = 0U;
 
   /* Check if the SD card is present */
@@ -291,25 +274,11 @@ UINT USBD_STORAGE_Flush(VOID *storage_instance, ULONG lun, ULONG number_blocks,
   UX_PARAMETER_NOT_USED(lba);
   UX_PARAMETER_NOT_USED(media_status);
 
-  // 介质已移除状态：返回“成功但带错误感知”
-  if (g_media_present == UX_FALSE) {
-    // 填标准 SENSE：NOT READY / MEDIUM NOT PRESENT
-    *media_status = UX_DEVICE_CLASS_STORAGE_SENSE_STATUS(0x02, 0x3A, 0x00);
-    return UX_ERROR; // 返回成功，避免上层 STALL
-  }
-  if (g_media_changed == UX_TRUE) {
-    *media_status = UX_DEVICE_CLASS_STORAGE_SENSE_STATUS(0x06, 0x28, 0x00);
-    // 让 Windows 收到多次 UNIT ATTENTION 才清除标志，确保它重读 FAT
-    g_media_changed_count++;
-    if (g_media_changed_count >= 3) { // 返回 3 次后清除
-      g_media_changed = UX_FALSE;
-      g_media_changed_count = 0U;
-    }
-    return UX_ERROR;
-  }
+  /* windows修改文件的最后一步一定调用这个函数
+   * FIleX需要检测到这个函数被执行就需要调用 fx_media_flush */
+  cnt_USBD_STORAGE_Flush++;
 
-  // 介质未移除状态
-
+  called_USBD_STORAGE_Flush = 1;
   /* USER CODE END USBD_STORAGE_Flush */
 
   return status;
@@ -334,9 +303,12 @@ UINT USBD_STORAGE_Status(VOID *storage_instance, ULONG lun, ULONG media_id,
   UX_PARAMETER_NOT_USED(lun);
   UX_PARAMETER_NOT_USED(media_id);
   UX_PARAMETER_NOT_USED(media_status);
+
+  cnt_USBD_STORAGE_Status++;
   // 此函数在 MSC U盘挂载在windows时，会被一直定期调用
   if (g_media_present == UX_FALSE) {
     *media_status = UX_DEVICE_CLASS_STORAGE_SENSE_STATUS(0x02, 0x3A, 0x00);
+    called_USBD_STORAGE_Status = 1;
     return UX_ERROR; // 让主机认为介质不在
   }
   if (g_media_changed == UX_TRUE) {
@@ -378,7 +350,7 @@ UINT USBD_STORAGE_Notification(VOID *storage_instance, ULONG lun,
   UX_PARAMETER_NOT_USED(notification_class);
   UX_PARAMETER_NOT_USED(media_notification);
   UX_PARAMETER_NOT_USED(media_notification_length);
-
+  cnt_USBD_STORAGE_Notification++;
   /* USER CODE END USBD_STORAGE_Notification */
 
   return status;
@@ -399,6 +371,8 @@ ULONG USBD_STORAGE_GetMediaLastLba(VOID) {
 #else // 等价写法
   LastLba = (ULONG)(hsd2.SdCard.BlockNbr - 1);
 #endif
+
+  cnt_USBD_STORAGE_GetMediaLastLba++;
   /* USER CODE END USBD_STORAGE_GetMediaLastLba */
 
   return LastLba;
@@ -419,6 +393,7 @@ ULONG USBD_STORAGE_GetMediaBlocklength(VOID) {
 #else // 等价写法
   MediaBlockLen = (ULONG)hsd2.SdCard.BlockSize;
 #endif
+  cnt_USBD_STORAGE_GetBlockLength++;
   /* USER CODE END USBD_STORAGE_GetMediaBlocklength */
 
   return MediaBlockLen;

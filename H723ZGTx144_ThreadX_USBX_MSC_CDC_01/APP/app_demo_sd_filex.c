@@ -569,7 +569,19 @@ void fxSdTestSpeed(void) {
   uint8_t err = 0;
   static uint8_t s_ucTestSn = 0;
 
-  g_media_present = UX_FALSE; // PC 先弹出 U盘:
+  extern uint8_t called_USBD_STORAGE_Status;
+
+  /* 先清零called_USBD_STORAGE_Status调度标记 */
+  called_USBD_STORAGE_Status = 0;
+  g_media_present = UX_FALSE; // 通知 PC 弹出 U盘
+
+  /* 阻塞等待USBD_STORAGE_Status被调用 */
+  while(called_USBD_STORAGE_Status == 0) {
+	  /* USBD_STORAGE_Status被调用且执行让主机认为介质不在的语句后
+	   * called_USBD_STORAGE_Status 为 1，退出while循环 */
+	  printf("SD卡测速准备开始，已通知主机弹出U盘\r\n");
+  	  break;
+  }
 #if 1
 
   for (i = 0; i < sizeof(g_TestBuf); i++) {
@@ -583,6 +595,23 @@ void fxSdTestSpeed(void) {
   if (status != FX_SUCCESS) {
     printf("挂载文件系统失败 -- %d\r\n", status);
     return;
+  }
+
+  /* 检测win11是否已经对SD卡修改过数据 */
+  extern uint8_t called_USBD_STORAGE_Flush;
+  if(called_USBD_STORAGE_Flush == 1) {
+	  printf("检测到电脑修改了SD卡文件, ");
+	  called_USBD_STORAGE_Flush = 0;
+
+	  /* 刷新FileX缓存 */
+	  status = fx_media_flush(&sdio_disk);
+
+	  /* Check the file close status.  */
+	  if (status != FX_SUCCESS) {
+	    printf("FileX 缓存刷新失败\r\n");
+	  } else {
+		  printf("FileX 缓存刷新成功\r\n");
+	  }
   }
 
   /* 打开文件 */
