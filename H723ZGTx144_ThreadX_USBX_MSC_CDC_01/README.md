@@ -2166,7 +2166,7 @@ UINT  _ux_device_class_storage_write(UX_SLAVE_CLASS_STORAGE *storage, ULONG lun,
 #define UX_SLAVE_REQUEST_DATA_MAX_LENGTH    (1024 * 2)
 ```
 
-编译使用的 **UX_SLAVE_REQUEST_DATA_MAX_LENGTH** 默认是 2048，在ux_port.h中，该值**可在CubeMX中修改**
+编译使用的 **UX_SLAVE_REQUEST_DATA_MAX_LENGTH** 在ux_user.h中，默认是 2048，该值**可在CubeMX中修改**
 
 这个buffer空间从哪里分配？当前工程 UX_DEVICE_ENDPOINT_BUFFER_OWNER 是0，那么在_ux_device_stack_initialize中从ThreadX字节池分配，**UX_DEVICE_ENDPOINT_BUFFER_OWNER** 同样支持在CubeMX中修改
 
@@ -2256,3 +2256,55 @@ CubeMX里  AzureRTOS Application 设置中 `USBX Device Register Connection Call
 > - USB Device Attached.  
 >
 > 
+
+### MSC 类的可实现回调函数
+
+有两个回调函数可以自己实现，[Eclipse文档：存储类初始化](https://github.com/eclipse-threadx/rtos-docs/blob/main/rtos-docs/usbx/usbx-device-stack-5.md#storage_class_initialize)
+
+> 应用程序还可以实现两个额外的可选回调函数；一个用于响应**GET_STATUS_NOTIFICATION**命令，另一个用于响应**SYNCHRONIZE_CACHE**命令。
+>
+> 如果应用程序想要处理来自主机的**GET_STATUS_NOTIFICATION**命令，则应实现具有以下原型的回调。
+>
+> ```c
+> UINT ux_slave_class_storage_media_notification( 
+>     VOID *storage,  
+>     ULONG lun,
+>     ULONG media_id,  
+>     ULONG notification_class,
+>     UCHAR **media_notification,  
+>     ULONG *media_notification_length);
+> ```
+>
+> 参数：
+>
+> - *storage*：是 storage 类的实例。
+> - *media_id*：目前未使用。notification_class 指定通知的类别。
+> - *media_notification*：应由应用程序设置为包含通知响应的缓冲区。
+> - *media_notification_length*：应由应用程序设置，以包含响应缓冲区的长度。
+>
+> 返回值指示命令是否成功——应该是**UX_SUCCESS**或**UX_ERROR**。
+>
+> 如果应用程序未实现此回调，则在收到**GET_STATUS_NOTIFICATION**命令时，USBX 将通知主机该命令未实现。
+>
+> **如果应用程序使用缓存来处理来自主机的写入操作，则应处理SYNCHRONIZE_CACHE**命令。例如，如果主机知道存储设备即将断开连接，则可能会发送此命令。在 Windows 系统中，如果您右键单击工具栏中的闪存驱动器图标并选择“弹出 [存储设备名称]”，Windows 将向该设备发出**SYNCHRONIZE_CACHE命令。**
+>
+> 如果应用程序想要处理来自主机的**SYNCHRONIZE_CACHE**命令，则应实现具有以下原型的回调。
+>
+> ```c
+> UINT ux_slave_class_storage_media_flush(
+>     VOID *storage, 
+>     ULONG lun,
+>     ULONG number_blocks, 
+>     ULONG lba, 
+>     ULONG *media_status);
+> ```
+>
+> 参数：
+>
+> - *storage*：是 storage 类的实例。
+> - *lun*：参数指定命令指向哪个 LUN。
+> - *number_blocks*：指定要同步的块数。
+> - *lba*：是要同步的第一个块的扇区地址。
+> - *media_status*：应与媒体状态回调返回值完全一致地填写。
+>
+> 返回值指示命令是否成功——应该是**UX_SUCCESS**或**UX_ERROR**。

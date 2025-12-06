@@ -48,7 +48,8 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
+/* 标记CubeMX生成的变量为弱符号（GCC专属） */
+#pragma weak fx_sd_media_memory
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -56,13 +57,13 @@
 TX_THREAD       fx_app_thread;
 
 /* Buffer for FileX FX_MEDIA sector cache. */
-//ALIGN_32BYTES (uint32_t fx_sd_media_memory[FX_STM32_SD_DEFAULT_SECTOR_SIZE / sizeof(uint32_t)]);
-__attribute__((section(".axisram2_bss"), aligned(32)))
-uint32_t fx_sd_media_memory[FX_STM32_SD_DEFAULT_SECTOR_SIZE / sizeof(uint32_t)];
+ALIGN_32BYTES (uint32_t fx_sd_media_memory[FX_STM32_SD_DEFAULT_SECTOR_SIZE / sizeof(uint32_t)]);
 /* Define FileX global data structures.  */
 FX_MEDIA        sdio_disk;
 
 /* USER CODE BEGIN PV */
+__attribute__((section(".axisram2_bss"), aligned(32)))
+uint32_t fx_sd_media_memory[FX_STM32_SD_DEFAULT_SECTOR_SIZE / sizeof(uint32_t)];
 extern void DemoFileX(void);
 /* USER CODE END PV */
 
@@ -120,24 +121,7 @@ UINT MX_FileX_Init(VOID *memory_ptr)
   fx_system_initialize();
 
   /* USER CODE BEGIN MX_FileX_Init 1*/
-#if 0
-  UINT sd_status = FX_SUCCESS;
-  sd_status =  fx_media_open(&sdio_disk, FX_SD_VOLUME_NAME, fx_stm32_sd_driver, (VOID *)FX_NULL, (VOID *) fx_sd_media_memory, sizeof(fx_sd_media_memory));
 
-  /* Check the media open sd_status */
-  if (sd_status != FX_SUCCESS)
-  {
-    /* USER CODE BEGIN SD open error */
-    while(1);
-    /* USER CODE END SD open error */
-  }
-
-  /* USER CODE BEGIN fx_app_thread_entry 1 */
-  sd_status =  fx_file_create(&sdio_disk, "myFile008.txt");
-  sd_status =  fx_media_close(&sdio_disk);
-  /* 卸载SD卡 */
-  DemoFileX();
-#endif
   /* USER CODE END MX_FileX_Init 1*/
 
   return ret;

@@ -90,6 +90,15 @@ UINT  _ux_device_class_storage_start_stop(UX_SLAVE_CLASS_STORAGE *storage, ULONG
     /* We set the CSW with success.  */
     storage -> ux_slave_class_storage_csw_status = UX_SLAVE_CLASS_STORAGE_CSW_PASSED;
 
+	/* cbwcb[4] 的 bit1=LOEJ，bit0=START */
+	UCHAR loej  = cbwcb[4] & 0x02;
+	UCHAR start = cbwcb[4] & 0x01;
+
+	if (loej && (start == 0))
+	{
+		extern VOID ux_app_msc_media_eject(VOID);
+		ux_app_msc_media_eject();   // 标记介质已移除
+	}
     /* Return successful completion.  */
     return(UX_SUCCESS);
 }

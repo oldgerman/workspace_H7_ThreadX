@@ -208,10 +208,6 @@ UINT USBD_CDC_ACM_Pre_Init(VOID)
 }
 
 
-
-/* USER CODE END PV */
-
-/* USER CODE BEGIN 2 */
 // 新增：USB回应函数（实现StreamSink的send接口）
 static void usb_response_send(const char *fmt, ...)
 {
@@ -276,12 +272,9 @@ void usbx_cdc_acm_cmd_parse_thread_entry(ULONG thread_input)
 }
 /* USER CODE END 0 */
 
-
-
 /**
   * @brief  USBD_CDC_ACM_Activate
   *         This function is called when insertion of a CDC ACM device.
-  *         在 cdc_acm 实例被正确初始化后才会被调用
   * @param  cdc_acm_instance: Pointer to the cdc acm class instance.
   * @retval none
   */
