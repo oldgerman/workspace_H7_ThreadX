@@ -62,7 +62,16 @@ extern HAL_SD_CardInfoTypeDef USBD_SD_CardInfo;
 /* Private defines -----------------------------------------------------------*/
 
 /* USER CODE BEGIN Private defines */
-
+/*APS512XXN-OBG PSRAM APmemory*/
+#define LINEAR_BURST_READ 0x20
+#define LINEAR_BURST_WRITE 0xA0 //!< 32Byte 默认突发
+#define DUMMY_CLOCK_CYCLES_SRAM_READ 5
+#define DUMMY_CLOCK_CYCLES_SRAM_WRITE 4
+/* Exported macro -----------------------------------------------------*/
+#define BUFFERSIZE (COUNTOF(aTxBuffer) - 1)
+#define COUNTOF(__BUFFER__) (sizeof(__BUFFER__) / sizeof(*(__BUFFER__)))
+#define DLYB_BUFFERSIZE (COUNTOF(Cal_buffer) - 1)
+#define EXTENDEDBUFFERSIZE (1024*1024) //暂时不搞跨2KB边界
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

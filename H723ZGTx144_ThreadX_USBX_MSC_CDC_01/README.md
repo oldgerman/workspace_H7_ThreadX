@@ -2072,6 +2072,8 @@ windows删除Speed.txt文件夹后，发送命令测试SD卡速度（首次可�
 
 ## 待优化
 
+### 读写速度
+
 USBX 调用 USBD_STORAGE_Read 和 USBD_STORAGE_Write 时，每次似乎只读写512字节大小，这会导致 无法进行批量传输，SD卡读写速度慢，能不能通过添加读写 FIFO 来加大每次读写SD卡的数据总大小
 
 USBD_STORAGE_Read、USBD_STORAGE_Write 会调用 SDMMC 读写函数，先记录参数 number_blocks 的历史最大值和最小值 ，使用10MB以上的单文件测试：
@@ -2236,6 +2238,156 @@ USBX_DEVICE_MEMORY_STACK_SIZE
 | 1024x4从U盘复制到电脑                                        | 1024x4从电脑复制到U盘                                        |
 | ![20251206-170504：1024x8从U盘复制到电脑](Images/20251206：主机进行SD卡读写时的块个数/20251206-170504：1024x8从U盘复制到电脑.png) | ![20251206-172204：1024x8从电脑复制到U盘](Images/20251206：主机进行SD卡读写时的块个数/20251206-172204：1024x8从电脑复制到U盘.png) |
 | 1024x8从U盘复制到电脑                                        | 1024x8从电脑复制到U盘                                        |
+
+### 打印目录树
+
+目前 win11 对 SD卡使用 Tree 命令：
+
+```scala
+G:\>tree /f
+文件夹 PATH 列表
+卷序列号为 4729-7D70
+G:.
+│  Speed01.txt
+│  Speed00.txt
+│  中文文件测试.txt
+│
+├─Software
+│      ni-visa_25.8_online.exe
+│      EasyWaveX_setup.rar
+│
+├─Datasheet
+│  │  metro-esp32-s3.pdf
+│  │  SEMIKRON功率半导体应用手册.pdf
+│  │
+│  └─电荷泵
+│      │  LM2662_200mA.pdf
+│      │  LM2664_40mA.pdf
+│      │  LM27761_250mA.pdf
+│      │  LM27762：±250mA.pdf
+│      │  LM2776_200mA.pdf
+│      │  LM7705_20mA_-0.23V输出_4mVpp.pdf
+│      │  LMC7660_20mA_1.5V到10V输入_-1.5V到-10V输出.pdf
+│      │  MAX660_100mA.pdf
+│      │  RT9397BF_50mA_2.7V到4.5V输入_±4.5V到±6V输出.pdf
+│      │  SGM3204_200mA.PDF
+│      │  SGM3207_60mA.PDF
+│      │  TPS60403_60mA.pdf
+│      │
+│      ├─0.典型电路
+│      │  │  LT1054：正压负压倍压电路.png
+│      │  │
+│      │  └─倍压电路
+│      │          两个LM2664从5.5V得到-11V@20mA.png
+│      │          ADI：Charge Pump Doubles Negative Voltage.pdf
+│      │
+│      ├─LM2664
+│      ├─LM2665
+│      │      3倍倍压.png
+│      │      倍压.png
+│      │      半压.png
+│      │      并联.png
+│      │
+│      ├─LM27761
+│      │      snvu506：LM27761EVM User's Guide.pdf
+│      │
+│      └─SGM3024
+│              SGM3204 样板.png
+│
+├─Music
+│      Future Pavilion.mp3
+│      Believe me.mp3
+│      Desire for existence.mp3
+│      Duca - フタリ.mp3
+│
+├─Video
+│      4K 触摸美丽 64M码率.mp4
+│      动态分区分配算法.mp4
+│
+└─Html
+        FileX+USBX Msc双边同步问题.html
+```
+
+FileX的实现需要参考
+
+- [2024-5-16：FileX里遍历目录及其子目录（非递归）](https://forum.anfulai.cn/forum.php?mod=viewthread&tid=124122&fromuid=57139)
+- [2024-6-30：使用FileX遍历文件，打印目录树](https://forum.anfulai.cn/forum.php?mod=viewthread&tid=124708&highlight=%C4%BF%C2%BC%CA%F7)：此贴参考了上一个帖子，性能更高
+
+问题，目录树中文乱码
+
+得参考：[捣鼓使用 filex 读取sd 卡里面的中文文件名在 lcd 上显示中文全称](https://forum.anfulai.cn/forum.php?mod=viewthread&tid=129950)
+
+已经实现：
+
+```scala
+$TREE
+Tree SD卡根目录：
+SD卡测试准备开始，已通知主机弹出U盘
+
+[/]
+├── System Volume Information ^ *
+│   ├── IndexerVolumeGuid  
+│   └── WPSettings.dat  
+├── Speed01.txt  
+├── Speed00.txt  
+├── 中文文件测试.txt  
+├── Software  
+│   ├── ni-visa_25.8_online.exe  
+│   └── EasyWaveX_setup.rar  
+├── Datasheet  
+│   ├── 电荷泵  
+│   │   ├── LM2662_200mA.pdf  
+│   │   ├── LM2664_40mA.pdf  
+│   │   ├── LM27761_250mA.pdf  
+│   │   ├── LM2776_200mA.pdf  
+│   │   ├── LM7705_20mA_-0.23V输出_4mVpp.pdf  
+│   │   ├── LMC7660_20mA_1.5V到10V输入_-1.5V到-10V输出.pdf  
+│   │   ├── MAX660_100mA.pdf  
+│   │   ├── RT9397BF_50mA_2.7V到4.5V输入_±4.5V到±6V输出.pdf  
+│   │   ├── SGM3204_200mA.PDF  
+│   │   ├── SGM3207_60mA.PDF  
+│   │   ├── TPS60403_60mA.pdf  
+│   │   ├── 0.典型电路  
+│   │   │   ├── LT1054：正压负压倍压电路.png  
+│   │   │   └── 倍压电路  
+│   │   │       ├── 两个LM2664从5.5V得到-11V@20mA.png  
+│   │   │       └── ADI：Charge Pump Doubles Negative Voltage.pdf  
+│   │   ├── LM2664  
+│   │   ├── LM2665  
+│   │   │   ├── 3倍倍压.png  
+│   │   │   ├── 倍压.png  
+│   │   │   ├── 半压.png  
+│   │   │   └── 并联.png  
+│   │   ├── LM27761  
+│   │   │   └── snvu506：LM27761EVM User's Guide.pdf  
+│   │   ├── SGM3024  
+│   │   │   └── SGM3204 样板.png  
+│   │   └── LM27762：±250mA.pdf  
+│   ├── metro-esp32-s3.pdf  
+│   └── SEMIKRON功率半导体应用手册.pdf  
+├── Music  
+│   ├── Future Pavilion.mp3  
+│   ├── Believe me.mp3  
+│   ├── Desire for existence.mp3  
+│   └── Duca - フタリ.mp3  
+├── Video  
+│   ├── 4K 触摸美丽 64M码率.mp4  
+│   └── 动态分区分配算法.mp4  
+└── Html  
+    └── FileX+USBX Msc双边同步问题.html  
+Total:50    Dir:13    File:37
+Hidden:1
+System:1
+
+```
+
+打印特定目录待实现
+
+cd目录、ls目录命令待实现。。。
+
+### ThreadX获取任务历史最大栈使用大小，CPU利用率
+
+https://blog.csdn.net/Simon223/article/details/120829375
 
 ## 注
 

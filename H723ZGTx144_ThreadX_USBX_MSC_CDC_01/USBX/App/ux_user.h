@@ -207,7 +207,7 @@
    0 - The default, endpoint buffer is managed by core stack. Each endpoint takes UX_SLAVE_REQUEST_DATA_MAX_LENGTH bytes.
    1 - Endpoint buffer managed by classes. In this case not all endpoints consume UX_SLAVE_REQUEST_DATA_MAX_LENGTH bytes.  */
 
-/* #define UX_DEVICE_ENDPOINT_BUFFER_OWNER              0 */
+#define UX_DEVICE_ENDPOINT_BUFFER_OWNER              1
 
 /* Defined, it enables device CDC ACM zero copy for bulk in/out endpoints (write/read).
    Enabled, the endpoint buffer is not allocated in class, application must provide the buffer for read/write,
@@ -254,7 +254,7 @@
    is 4096 bytes but can be reduced in memory constrained environments. For cd-rom support in the storage
    class, this value cannot be less than 2048.  */
 
-/* #define UX_SLAVE_REQUEST_DATA_MAX_LENGTH                 4096 */
+#define UX_SLAVE_REQUEST_DATA_MAX_LENGTH                    32768
 
 /* Defined, it enables zero copy support (works if PRINTER owns endpoint buffer).
     Defined, it enables zero copy for bulk in/out endpoints (write/read). In this case, the endpoint

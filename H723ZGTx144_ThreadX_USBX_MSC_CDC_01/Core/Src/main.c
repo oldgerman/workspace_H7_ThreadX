@@ -26,7 +26,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "aps512xx.h"
+#include "dynamic_ram.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -49,6 +50,9 @@
 /* USER CODE BEGIN PV */
 HAL_SD_CardInfoTypeDef                     USBD_SD_CardInfo;
 
+__attribute__((section (".psram_nold"))) uint8_t OSPI_Array[1024];
+uint8_t aTxBuffer[] = "& OCTOSPI/Quad-spi PSRAM Memory-mapped base on H723ZGTx144 v1.0$";
+
 // DTCM 前 0x400 空间用于存放从 FLASH 拷贝的中断向量表副本
 __attribute__((section(".dtcmvtor_nold"), aligned(4))) uint8_t dtcm_isr_vector[1024];
 /* USER CODE END PV */
@@ -57,7 +61,7 @@ __attribute__((section(".dtcmvtor_nold"), aligned(4))) uint8_t dtcm_isr_vector[1
 void SystemClock_Config(void);
 static void MPU_Config(void);
 /* USER CODE BEGIN PFP */
-
+static void Configure_APMemory(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -101,6 +105,12 @@ int main(void)
 	/** 将当前中断向量表设置为从FLASH复制到DITCM中的副本 */
 	SCB->VTOR = D1_DTCMRAM_BASE;
 #endif
+	__IO uint8_t *mem_addr;
+	uint32_t address = 0;
+	uint16_t index1;/*index1 counter of bytes used when reading/
+	writing 256 bytes buffer */
+	uint16_t index2;/*index2 counter of 256 bytes buffer used when reading/
+	writing the 1Mbytes extended buffer */
   /* Operation interrupt vector table end ------------------------------------*/
   /* USER CODE END 1 */
 
@@ -138,6 +148,45 @@ int main(void)
   MX_OCTOSPI1_Init();
   MX_SDMMC2_SD_Init();
   /* USER CODE BEGIN 2 */
+
+
+  Configure_APMemory();
+
+
+	if (APS512XX_EnableMemoryMappedMode(&hospi1, 8, 4, 0U) != HAL_OK) // 线性突发模式，执行跨边界，解决2K后地址回卷（Wrap）
+	//	if (APS512XX_EnableMemoryMappedMode(&hospi1, 8, 4, APS512XX_WRITE_CMD) != HAL_OK)
+	{
+		_Error_Handler(__FILE__, __LINE__);
+	}
+	// H723ZGTx144：测试：OCTOSPI_CLK=90MHz DTR MODE 1MB 误码率 0，若提高到100MHz误码率飙升
+	int led = 0;
+    uint64_t cnt_charW = 0;
+	/*Writing 1Mbyte (256Byte BUFFERSIZE x 4096 times) */
+	mem_addr = (__IO uint8_t *)(OCTOSPI1_BASE + address);
+	for (index2 = 0; index2 < EXTENDEDBUFFERSIZE/BUFFERSIZE; index2++) {
+		for (index1 = 0; index1 < BUFFERSIZE; index1++) {
+			*mem_addr = aTxBuffer[index1];
+			mem_addr++;
+			cnt_charW++;
+		}
+	}
+
+	/*Writing 1Mbyte (256Byte BUFFERSIZE x 4096 times) */
+	uint64_t cnt_charR = 0;
+    mem_addr = (__IO uint8_t *)(OCTOSPI1_BASE + address);
+    for (index2 = 0; index2 < EXTENDEDBUFFERSIZE/BUFFERSIZE; index2++) {
+		for (index1 = 0; index1 < BUFFERSIZE; index1++) {
+			if (*mem_addr != aTxBuffer[index1]) {
+				led++;
+			}
+			mem_addr++;
+			cnt_charR++;
+		}
+    }
+	uint8_t* p = OSPI_Array;
+	p++;
+	p--;
+
 
   /* Check if SD card is present */
   //if(HAL_GPIO_ReadPin(GPIOG, GPIO_PIN_12) == GPIO_PIN_SET) { Error_Handler(); }
@@ -237,6 +286,79 @@ void _Error_Handler(const char * file, uint32_t line)
   }
   /* USER CODE END Error_Handler_Debug */
 }
+
+/**
+* @brief  Switch from Octal Mode to Hexa Mode on the memory
+* @param  None
+* @retval None
+*/
+uint8_t aps_ID[2] = {0, 0};
+static void Configure_APMemory(void)
+{
+	/* MR0 register for read and write
+	                                     MR8[7:0] = 0x24  =  B00100100
+			   N/A                       MR0[7:6] = 00  --> constraint value
+			   Read Latency Type         MR0[5]   = 1   --> LT               : Fixed ---> FL Codes
+			   Read Latency Code         MR0[4:2] = 001 --> FL Codes (MR0[5]=1) Latency (LCx2) = 8
+			   Drive Strength Codes      MR0[1:0] = 00  --> Drive StrengthFull  (25Ω default)
+	*/
+	uint8_t regW_MR0[2] = {0x24, 0x8D}; //!< To configure AP memory Latency Type and drive Strength
+	uint8_t regR_MR0[2] = {0};
+	/* MR8 register for read and write
+	                                     MR8[7:0] = 0x0B  =  B00001011
+       IO X8/X16 Mode                    MR8[6]   = 0    --> X8 Mode
+       Row Boundary Crossing Read Enable MR8[3]   = 1    --> Allow reads cross page (row) boundary
+       Burst Type                        MR8[2]   = 0    -->
+       Burst Length                      MR8[1:0] = 11   --> 2K Byte/1K Word Wrap，对应 “2K Byte Wrap 突发模式”（地址超过 2K 会回卷）
+	 */
+	uint8_t regW_MR8[2] = {0x0B, 0x08};  //!< To configure AP memory Burst Type
+	uint8_t regR_MR8[2] = {0};
+
+	//复位所有寄存器配置
+	if(APS512XX_Reset(&hospi1) != HAL_OK)
+	{
+	_Error_Handler(__FILE__, __LINE__);
+	}
+#if 1
+	/*Configure Read Latency and drive Strength */
+	if (APS512XX_WriteReg(&hospi1, APS512XX_MR0_ADDRESS, regW_MR0) != HAL_OK)
+	{
+		_Error_Handler(__FILE__, __LINE__);
+	}
+
+	/* Check MR0 configuration */
+	if (APS512XX_ReadReg(&hospi1, APS512XX_MR0_ADDRESS, regR_MR0, 5) != HAL_OK)
+	{
+		_Error_Handler(__FILE__, __LINE__);
+	}
+
+	/* Check MR0 configuration */
+	if (regR_MR0[0] != regW_MR0[0])
+	{
+		_Error_Handler(__FILE__, __LINE__);
+	}
+#endif
+	/* Configure Burst Length */
+	if (APS512XX_WriteReg(&hospi1, APS512XX_MR8_ADDRESS, regW_MR8) != HAL_OK)
+	{
+		_Error_Handler(__FILE__, __LINE__);
+	}
+
+	/* Check MR8 configuration */
+	if (APS512XX_ReadReg(&hospi1, APS512XX_MR8_ADDRESS, regR_MR8, 5) != HAL_OK)
+	{
+		_Error_Handler(__FILE__, __LINE__);
+	}
+
+	if (regR_MR8[0] != regW_MR8[0])
+	{
+		_Error_Handler(__FILE__, __LINE__);
+	}
+
+	if(0){
+		__NOP();
+	}
+}
 /* USER CODE END 4 */
 
  /* MPU Configuration */
@@ -296,8 +418,6 @@ void MPU_Config(void)
   MPU_InitStruct.Number = MPU_REGION_NUMBER4;
   MPU_InitStruct.BaseAddress = 0x90000000;
   MPU_InitStruct.Size = MPU_REGION_SIZE_64MB;
-  MPU_InitStruct.TypeExtField = MPU_TEX_LEVEL0;
-  MPU_InitStruct.IsCacheable = MPU_ACCESS_CACHEABLE;
 
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
 
@@ -306,8 +426,6 @@ void MPU_Config(void)
   MPU_InitStruct.Number = MPU_REGION_NUMBER5;
   MPU_InitStruct.BaseAddress = 0x24010000;
   MPU_InitStruct.Size = MPU_REGION_SIZE_256KB;
-  MPU_InitStruct.TypeExtField = MPU_TEX_LEVEL1;
-  MPU_InitStruct.IsCacheable = MPU_ACCESS_NOT_CACHEABLE;
 
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
   /* Enables the MPU */

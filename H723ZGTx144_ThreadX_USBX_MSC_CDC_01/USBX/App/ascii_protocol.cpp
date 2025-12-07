@@ -15,6 +15,7 @@
 #include "ascii_protocol.h"
 
 #include "app_demo_sd_filex.h"
+#include "app_demo_psram.h"
 
 StreamSink usb_response_channel;  // USB回应通道
 
@@ -26,7 +27,7 @@ static void Respond(StreamSink& _responseChannel, bool _isError, const char* fmt
     char format[256];
 
     if (_isError) {
-        snprintf(format, sizeof(format), "ERROR: %s\r\n", fmt);
+        snprintf(format, sizeof(format), "命令解析失败: %s\r\n", fmt);
     } else {
         snprintf(format, sizeof(format), "%s\r\n", fmt);
     }
@@ -39,9 +40,6 @@ static void Respond(StreamSink& _responseChannel, bool _isError, const char* fmt
 static void RespondIsrStackUsageInWords(StreamSink& _responseChannel) {
     Respond(_responseChannel, false, "ISR Stack Usage: 123 words");
 }
-
-// 占位：PSRAM测试函数
-void PSRAM_Test(uint32_t base) { /* 你的逻辑 */ }
 
 
 // 命令执行函数类型：接收命令体（前缀后的内容）、回应通道，无返回值
@@ -126,7 +124,7 @@ public:
     // 解析并执行命令（替代原有OnAsciiCmd的if-else逻辑）
     void parseAndExecute(const char* _cmd, size_t _len, StreamSink& response) {
         if (_len == 0 || _cmd == nullptr) {
-            Respond(response, true, "Empty command");
+            Respond(response, true, "收到空命令");
             return;
         }
 
@@ -137,7 +135,7 @@ public:
         // 查找前缀对应的命令集合
         auto prefixIt = m_cmdMap.find(prefix);
         if (prefixIt == m_cmdMap.end()) {
-            Respond(response, true, "Unknown prefix: %c", prefix);
+            Respond(response, true, "找不到匹配的前缀: %c", prefix);
             return;
         }
 
@@ -156,7 +154,7 @@ public:
         }
 
         if (!cmdMatched) {
-            Respond(response, true, "Unknown command for prefix %c: %s", prefix, cmdBody.c_str());
+            Respond(response, true, "未知的命令前缀 %c: %s", prefix, cmdBody.c_str());
         }
     }
 
@@ -276,12 +274,17 @@ void initCommandRegistry() {
 
     registry.registerCommand('$', "TEST_PSRAM", [](const std::string&, StreamSink& response) {
         Respond(response, false, "PSRAM Test started");
-        // PSRAM_Test(OCTOSPI1_BASE); // 你测试函数
+         PSRAM_Test(OCTOSPI1_BASE); // 你测试函数
     }, "测试PSRAM"); // 补充描述
     registry.registerCommand('$', "TEST_SD_SPEED", [](const std::string&, StreamSink& response) {
         Respond(response, false, "开始SD卡速度测速");
-    	fxSdTestSpeed();	/* SD卡速度测试 */
+    	fxSdTestSpeed();
     }, "测试SD卡速度"); // 补充描述
+    registry.registerCommand('$', "TREE", [](const std::string&, StreamSink& response) {
+        Respond(response, false, "Tree SD卡根目录：");
+        SD_Tree_Root();
+    }, "Tree SD卡根目录"); // 补充描述
+
     registry.registerCommand('$', "USB_MSC_REENUM", [](const std::string&, StreamSink& response) {
         Respond(response, false, "重新枚举USB MSC设备");
         g_media_present = UX_FALSE; // PC 先弹出 U盘:

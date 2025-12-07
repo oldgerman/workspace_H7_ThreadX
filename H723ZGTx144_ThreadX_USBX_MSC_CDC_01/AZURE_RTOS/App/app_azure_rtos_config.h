@@ -51,7 +51,7 @@ extern "C" {
 
 #define FX_APP_MEM_POOL_SIZE                     1024*10
 
-#define UX_DEVICE_APP_MEM_POOL_SIZE              1024*120
+#define UX_DEVICE_APP_MEM_POOL_SIZE              1024*256
 
 /* USER CODE BEGIN EC */
 

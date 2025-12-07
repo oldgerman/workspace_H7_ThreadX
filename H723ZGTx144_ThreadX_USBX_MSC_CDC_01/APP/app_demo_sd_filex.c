@@ -55,7 +55,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-
+#include "app_demo_sd_filex.h"
 
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
@@ -70,9 +70,9 @@
 /* Private constants ---------------------------------------------------------*/
 /* Exported variables --------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
-/* 测试所用静态内存 */
-__attribute__((section(".axisram2_bss"),
-               aligned(32))) uint32_t media_memory[16 * 1024];
+/* FileX测试所用静态内存 */
+//__attribute__((section(".axisram2_bss"), aligned(32))) uint32_t media_memory[64 * 1024];
+__attribute__((section(".psram_nold"), aligned(32))) uint32_t media_memory[64 * 1024];
 ALIGN_32BYTES(char FsReadBuf[1024]);
 ALIGN_32BYTES(char FsWriteBuf[1024]) = {
     "ThreadX FileX Write Demo \r\n www.armfly.com \r\n"};
@@ -83,6 +83,7 @@ ALIGN_32BYTES(char FsWriteBuf[1024]) = {
 //__attribute__((section(".axisram2_bss"), aligned(32))) uint8_t
 //g_TestBuf[BUF_SIZE];
 __attribute__((section(".sram1_bss"), aligned(32))) uint8_t g_TestBuf[BUF_SIZE];
+//__attribute__((section(".psram_nold"), aligned(32))) uint8_t g_TestBuf[BUF_SIZE];
 
 /* FileX相关变量 */
 FX_FILE fx_file;
@@ -98,6 +99,301 @@ static void DeleteDirFile(void);
 void fxSdTestSpeed(void);
 
 /* Function implementations --------------------------------------------------*/
+/*
+*********************************************************************************************************
+*	函 数 名: WriteFileTest
+*	功能说明: 测试文件读写速度
+*	形    参：无
+*	返 回 值: 无
+*********************************************************************************************************
+*/
+void fxSdTestSpeed(void) {
+  UINT status;
+  char path[64];
+
+  ULONG bw;
+  uint32_t i, k;
+  uint32_t runtime1, runtime2, timelen;
+  uint8_t err = 0;
+  static uint8_t s_ucTestSn = 0;
+
+
+
+  /* 先清零called_USBD_STORAGE_Status调度标记 */
+  extern uint8_t called_USBD_STORAGE_Status;
+  called_USBD_STORAGE_Status = 0;
+  g_media_present = UX_FALSE; // 通知 PC 弹出 U盘
+
+  /* 阻塞等待USBD_STORAGE_Status被调用 */
+  while(called_USBD_STORAGE_Status == 0) {
+	  /* USBD_STORAGE_Status被调用且执行让主机认为介质不在的语句后
+	   * called_USBD_STORAGE_Status 为 1，退出while循环 */
+	  printf("SD卡测试准备开始，已通知主机弹出U盘\r\n");
+  	  break;
+  }
+#if 1
+
+  for (i = 0; i < sizeof(g_TestBuf); i++) {
+    g_TestBuf[i] = (i / 512) + '0';
+  }
+
+  /* 挂载SD卡 */
+  status = fx_media_open(&sdio_disk, "STM32_SDIO_DISK", fx_stm32_sd_driver, 0,
+                         media_memory, sizeof(media_memory));
+
+  if (status != FX_SUCCESS) {
+    printf("挂载文件系统失败 -- %d\r\n", status);
+    return;
+  }
+
+  /* 检测win11是否已经对SD卡修改过数据 */
+  extern uint8_t called_USBD_STORAGE_Flush;
+  if(called_USBD_STORAGE_Flush == 1) {
+	  printf("检测到电脑修改了SD卡文件, ");
+	  called_USBD_STORAGE_Flush = 0;
+
+	  /* 刷新FileX缓存 */
+	  status = fx_media_flush(&sdio_disk);
+
+	  /* Check the file close status.  */
+	  if (status != FX_SUCCESS) {
+	    printf("FileX 缓存刷新失败\r\n");
+	  } else {
+		  printf("FileX 缓存刷新成功\r\n");
+	  }
+  }
+
+  /* 打开文件 */
+  sprintf(path, "Speed%02d.txt", s_ucTestSn++); /* 每写1次，序号递增 */
+
+  /* 写一串数据 */
+  printf("开始写文件%s %dKB ...\r\n", path, TEST_FILE_LEN / 1024);
+
+  /* 创建文件 */
+  status = fx_file_create(&sdio_disk, path);
+
+  /* 检测状态 */
+  if (status != FX_SUCCESS) {
+    /* 失败的话，可以考虑二次创建 */
+    if (status != FX_ALREADY_CREATED) {
+      printf("创建文件失败\r\n");
+    }
+  }
+
+  /* 打开文件  */
+  status = fx_file_open(&sdio_disk, &fx_file, path, FX_OPEN_FOR_WRITE);
+
+  if (status != FX_SUCCESS) {
+    printf("打开文件失败\r\n");
+  }
+
+  /* 设置到起始位置读取  */
+  status = fx_file_seek(&fx_file, 0);
+
+  if (status != FX_SUCCESS) {
+    printf("设置读取位置失败\r\n");
+  }
+
+  runtime1 = bsp_GetRunTime(); /* 读取系统运行时间 */
+  for (i = 0; i < TEST_FILE_LEN / BUF_SIZE; i++) {
+    /* 写入字符串到文件  */
+    status = fx_file_write(&fx_file, g_TestBuf, sizeof(g_TestBuf));
+
+    if (status == FX_SUCCESS) {
+      if (((i + 1) % 8) == 0) {
+        printf(".");
+      }
+    } else {
+      err = 1;
+      printf("%s文件写失败\r\n", path);
+      break;
+    }
+  }
+  runtime2 = bsp_GetRunTime(); /* 读取系统运行时间 */
+
+  if (err == 0) {
+    timelen = (runtime2 - runtime1);
+    printf("\r\n  写耗时 : %ldms   平均写速度 : %ldB/S (%ldKB/S)\r\n", timelen,
+           (TEST_FILE_LEN * 1000) / timelen,
+           ((TEST_FILE_LEN / 1024) * 1000) / timelen);
+    //-Og 4366KB/s@10MHz, 7787KB/s@50MHz
+  }
+
+  /* 关闭文件  */
+  status = fx_file_close(&fx_file);
+
+  /* Check the file close status.  */
+  if (status != FX_SUCCESS) {
+    printf("关闭文件失败\r\n");
+  }
+
+  /* 保证文件写入全部生效 */
+  status = fx_media_flush(&sdio_disk);
+
+  /* Check the file close status.  */
+  if (status != FX_SUCCESS) {
+    printf("fx_media_flush失败\r\n");
+  }
+
+  ////////////////////////////////////////////////////////////////////////////////////////////////////
+  /* 开始读文件测试 */
+  printf("开始读文件 %dKB ...\r\n", TEST_FILE_LEN / 1024);
+
+  /* 打开文件  */
+  status = fx_file_open(&sdio_disk, &fx_file, path, FX_OPEN_FOR_READ);
+
+  if (status != FX_SUCCESS) {
+    printf("打开文件失败\r\n");
+  }
+
+  /* 设置到起始位置读取  */
+  status = fx_file_seek(&fx_file, 0);
+
+  if (status != FX_SUCCESS) {
+    printf("设置读取位置失败\r\n");
+  }
+
+  runtime1 = bsp_GetRunTime(); /* 读取系统运行时间 */
+  for (i = 0; i < TEST_FILE_LEN / BUF_SIZE; i++) {
+    /* 写入字符串到文件  */
+
+    status = fx_file_read(&fx_file, g_TestBuf, sizeof(g_TestBuf), &bw);
+    if (status == FX_SUCCESS) {
+      if (((i + 1) % 8) == 0) {
+        printf(".");
+      }
+
+      /* 比较写入的数据是否正确，此语句会导致读卡速度结果降低到 3.5MBytes/S */
+      for (k = 0; k < sizeof(g_TestBuf); k++) {
+        if (g_TestBuf[k] != (k / 512) + '0') {
+          err = 1;
+          printf("Speed1.txt 文件读成功，但是数据出错\r\n");
+          break;
+        }
+      }
+      if (err == 1) {
+        break;
+      }
+    } else {
+      err = 1;
+      printf("Speed1.txt 文件读失败\r\n");
+      break;
+    }
+  }
+  runtime2 = bsp_GetRunTime(); /* 读取系统运行时间 */
+
+  if (err == 0) {
+    timelen = (runtime2 - runtime1);
+    printf("\r\n  读耗时 : %ldms   平均读速度 : %ldB/S (%ldKB/S)\r\n", timelen,
+           (TEST_FILE_LEN * 1000) / timelen,
+           ((TEST_FILE_LEN / 1024) * 1000) / timelen);
+    //-Og 6.965KB/s@50MHz
+  }
+
+  /* 读文件完成后关闭句柄 */
+  status = fx_file_close(&fx_file);
+  if (status != FX_SUCCESS) {
+    printf("关闭读文件失败 -- %d\r\n", status);
+  }
+
+  /* 删除文件 */
+//  uint8_t old_ucTestSn = s_ucTestSn - 1;
+//  sprintf(path, "Speed%02d.txt", old_ucTestSn);
+//  status = fx_file_delete(&sdio_disk, path);
+//  if (status != FX_SUCCESS) {
+//    printf("删除 %s 失败，错误码：%d\r\n", path, status);
+//  }
+
+  /* Flush确保删除生效 */
+  status = fx_media_flush(&sdio_disk);
+  if (status != FX_SUCCESS) {
+    printf("flush失败\r\n");
+  }
+
+  /* 最后关闭介质 */
+  status = fx_media_close(&sdio_disk);
+  if (status != FX_SUCCESS) {
+    printf("卸载文件系统失败 -- %d\r\n", status);
+  }
+
+#endif
+  g_media_present = UX_TRUE; // 重新让电脑识别U盘
+  g_media_changed = UX_TRUE; //
+  printf("测速完毕，USB 设备已重新枚举...\r\n");
+}
+
+
+/**
+ * @brief Tree命令打印根目录
+ */
+void SD_Tree_Root()
+{
+	  /* 先清零called_USBD_STORAGE_Status调度标记 */
+	  extern uint8_t called_USBD_STORAGE_Status;
+	  called_USBD_STORAGE_Status = 0;
+	  g_media_present = UX_FALSE; // 通知 PC 弹出 U盘
+
+	  /* 阻塞等待USBD_STORAGE_Status被调用 */
+	  while(called_USBD_STORAGE_Status == 0) {
+		  /* USBD_STORAGE_Status被调用且执行让主机认为介质不在的语句后
+		   * called_USBD_STORAGE_Status 为 1，退出while循环 */
+		  printf("SD卡测试准备开始，已通知主机弹出U盘\r\n");
+	  	  break;
+	  }
+
+
+
+    uint16_t status = 0;
+
+    uint8_t workspace[MAX_TRAVEL_DEPTH] = {0};
+
+
+    status = fx_media_open(&sdio_disk, "STM32_SDIO_DISK", fx_stm32_sd_driver, 0,
+                           media_memory, sizeof(media_memory));
+
+    if (status != FX_SUCCESS)
+    {
+        printf("Open SD media failed! %#X\n", status);
+        return;
+    }
+
+    /* 检测win11是否已经对SD卡修改过数据 */
+    extern uint8_t called_USBD_STORAGE_Flush;
+    if(called_USBD_STORAGE_Flush == 1) {
+  	  printf("检测到电脑修改了SD卡文件, ");
+  	  called_USBD_STORAGE_Flush = 0;
+
+  	  /* 刷新FileX缓存 */
+  	  status = fx_media_flush(&sdio_disk);
+
+  	  /* Check the file close status.  */
+  	  if (status != FX_SUCCESS) {
+  	    printf("FileX 缓存刷新失败\r\n");
+  	  } else {
+  		  printf("FileX 缓存刷新成功\r\n");
+  	  }
+    }
+
+
+    /* 打印根目录,深度最大为10，显示隐藏文件 */
+    char *path = "/";
+    status = sd_com_tree(path, 10, SD_SHOW_HIDE, workspace, sizeof(workspace));
+    if (status != FX_SUCCESS)
+    {
+        printf("Print tree [%s] failed! %#X\n", path, status);
+        return;
+    }
+
+    /* 关闭SD卡 */
+    status = fx_media_close(FX_SD_MEDIA);
+    if (status != FX_SUCCESS)
+    {
+//        printf("Close SD media failed! %#X\n", path, status);
+    }
+
+    g_media_present = UX_TRUE; // 重新让电脑识别U盘
+    g_media_changed = UX_TRUE; //
+}
 
 /*
 *********************************************************************************************************
@@ -551,227 +847,6 @@ static void DeleteDirFile(void) {
   }
 }
 
-/*
-*********************************************************************************************************
-*	函 数 名: WriteFileTest
-*	功能说明: 测试文件读写速度
-*	形    参：无
-*	返 回 值: 无
-*********************************************************************************************************
-*/
-void fxSdTestSpeed(void) {
-  UINT status;
-  char path[64];
-
-  ULONG bw;
-  uint32_t i, k;
-  uint32_t runtime1, runtime2, timelen;
-  uint8_t err = 0;
-  static uint8_t s_ucTestSn = 0;
-
-  extern uint8_t called_USBD_STORAGE_Status;
-
-  /* 先清零called_USBD_STORAGE_Status调度标记 */
-  called_USBD_STORAGE_Status = 0;
-  g_media_present = UX_FALSE; // 通知 PC 弹出 U盘
-
-  /* 阻塞等待USBD_STORAGE_Status被调用 */
-  while(called_USBD_STORAGE_Status == 0) {
-	  /* USBD_STORAGE_Status被调用且执行让主机认为介质不在的语句后
-	   * called_USBD_STORAGE_Status 为 1，退出while循环 */
-	  printf("SD卡测速准备开始，已通知主机弹出U盘\r\n");
-  	  break;
-  }
-#if 1
-
-  for (i = 0; i < sizeof(g_TestBuf); i++) {
-    g_TestBuf[i] = (i / 512) + '0';
-  }
-
-  /* 挂载SD卡 */
-  status = fx_media_open(&sdio_disk, "STM32_SDIO_DISK", fx_stm32_sd_driver, 0,
-                         media_memory, sizeof(media_memory));
-
-  if (status != FX_SUCCESS) {
-    printf("挂载文件系统失败 -- %d\r\n", status);
-    return;
-  }
-
-  /* 检测win11是否已经对SD卡修改过数据 */
-  extern uint8_t called_USBD_STORAGE_Flush;
-  if(called_USBD_STORAGE_Flush == 1) {
-	  printf("检测到电脑修改了SD卡文件, ");
-	  called_USBD_STORAGE_Flush = 0;
-
-	  /* 刷新FileX缓存 */
-	  status = fx_media_flush(&sdio_disk);
-
-	  /* Check the file close status.  */
-	  if (status != FX_SUCCESS) {
-	    printf("FileX 缓存刷新失败\r\n");
-	  } else {
-		  printf("FileX 缓存刷新成功\r\n");
-	  }
-  }
-
-  /* 打开文件 */
-  sprintf(path, "Speed%02d.txt", s_ucTestSn++); /* 每写1次，序号递增 */
-
-  /* 写一串数据 */
-  printf("开始写文件%s %dKB ...\r\n", path, TEST_FILE_LEN / 1024);
-
-  /* 创建文件 */
-  status = fx_file_create(&sdio_disk, path);
-
-  /* 检测状态 */
-  if (status != FX_SUCCESS) {
-    /* 失败的话，可以考虑二次创建 */
-    if (status != FX_ALREADY_CREATED) {
-      printf("创建文件失败\r\n");
-    }
-  }
-
-  /* 打开文件  */
-  status = fx_file_open(&sdio_disk, &fx_file, path, FX_OPEN_FOR_WRITE);
-
-  if (status != FX_SUCCESS) {
-    printf("打开文件失败\r\n");
-  }
-
-  /* 设置到起始位置读取  */
-  status = fx_file_seek(&fx_file, 0);
-
-  if (status != FX_SUCCESS) {
-    printf("设置读取位置失败\r\n");
-  }
-
-  runtime1 = bsp_GetRunTime(); /* 读取系统运行时间 */
-  for (i = 0; i < TEST_FILE_LEN / BUF_SIZE; i++) {
-    /* 写入字符串到文件  */
-    status = fx_file_write(&fx_file, g_TestBuf, sizeof(g_TestBuf));
-
-    if (status == FX_SUCCESS) {
-      if (((i + 1) % 8) == 0) {
-        printf(".");
-      }
-    } else {
-      err = 1;
-      printf("%s文件写失败\r\n", path);
-      break;
-    }
-  }
-  runtime2 = bsp_GetRunTime(); /* 读取系统运行时间 */
-
-  if (err == 0) {
-    timelen = (runtime2 - runtime1);
-    printf("\r\n  写耗时 : %ldms   平均写速度 : %ldB/S (%ldKB/S)\r\n", timelen,
-           (TEST_FILE_LEN * 1000) / timelen,
-           ((TEST_FILE_LEN / 1024) * 1000) / timelen);
-    //-Og 4366KB/s@10MHz, 7787KB/s@50MHz
-  }
-
-  /* 关闭文件  */
-  status = fx_file_close(&fx_file);
-
-  /* Check the file close status.  */
-  if (status != FX_SUCCESS) {
-    printf("关闭文件失败\r\n");
-  }
-
-  /* 保证文件写入全部生效 */
-  status = fx_media_flush(&sdio_disk);
-
-  /* Check the file close status.  */
-  if (status != FX_SUCCESS) {
-    printf("fx_media_flush失败\r\n");
-  }
-
-  ////////////////////////////////////////////////////////////////////////////////////////////////////
-  /* 开始读文件测试 */
-  printf("开始读文件 %dKB ...\r\n", TEST_FILE_LEN / 1024);
-
-  /* 打开文件  */
-  status = fx_file_open(&sdio_disk, &fx_file, path, FX_OPEN_FOR_READ);
-
-  if (status != FX_SUCCESS) {
-    printf("打开文件失败\r\n");
-  }
-
-  /* 设置到起始位置读取  */
-  status = fx_file_seek(&fx_file, 0);
-
-  if (status != FX_SUCCESS) {
-    printf("设置读取位置失败\r\n");
-  }
-
-  runtime1 = bsp_GetRunTime(); /* 读取系统运行时间 */
-  for (i = 0; i < TEST_FILE_LEN / BUF_SIZE; i++) {
-    /* 写入字符串到文件  */
-
-    status = fx_file_read(&fx_file, g_TestBuf, sizeof(g_TestBuf), &bw);
-    if (status == FX_SUCCESS) {
-      if (((i + 1) % 8) == 0) {
-        printf(".");
-      }
-
-      /* 比较写入的数据是否正确，此语句会导致读卡速度结果降低到 3.5MBytes/S */
-      for (k = 0; k < sizeof(g_TestBuf); k++) {
-        if (g_TestBuf[k] != (k / 512) + '0') {
-          err = 1;
-          printf("Speed1.txt 文件读成功，但是数据出错\r\n");
-          break;
-        }
-      }
-      if (err == 1) {
-        break;
-      }
-    } else {
-      err = 1;
-      printf("Speed1.txt 文件读失败\r\n");
-      break;
-    }
-  }
-  runtime2 = bsp_GetRunTime(); /* 读取系统运行时间 */
-
-  if (err == 0) {
-    timelen = (runtime2 - runtime1);
-    printf("\r\n  读耗时 : %ldms   平均读速度 : %ldB/S (%ldKB/S)\r\n", timelen,
-           (TEST_FILE_LEN * 1000) / timelen,
-           ((TEST_FILE_LEN / 1024) * 1000) / timelen);
-    //-Og 6.965KB/s@50MHz
-  }
-
-  /* 读文件完成后关闭句柄 */
-  status = fx_file_close(&fx_file);
-  if (status != FX_SUCCESS) {
-    printf("关闭读文件失败 -- %d\r\n", status);
-  }
-
-  /* 删除文件 */
-//  uint8_t old_ucTestSn = s_ucTestSn - 1;
-//  sprintf(path, "Speed%02d.txt", old_ucTestSn);
-//  status = fx_file_delete(&sdio_disk, path);
-//  if (status != FX_SUCCESS) {
-//    printf("删除 %s 失败，错误码：%d\r\n", path, status);
-//  }
-
-  /* Flush确保删除生效 */
-  status = fx_media_flush(&sdio_disk);
-  if (status != FX_SUCCESS) {
-    printf("flush失败\r\n");
-  }
-
-  /* 最后关闭介质 */
-  status = fx_media_close(&sdio_disk);
-  if (status != FX_SUCCESS) {
-    printf("卸载文件系统失败 -- %d\r\n", status);
-  }
-
-#endif
-  g_media_present = UX_TRUE; // 重新让电脑识别U盘
-  g_media_changed = UX_TRUE; //
-  printf("测速完毕，USB 设备已重新枚举...\r\n");
-}
 
 /***************************** 安富莱电子 www.armfly.com (END OF FILE)
  * *********************************/

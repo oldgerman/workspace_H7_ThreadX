@@ -83,7 +83,8 @@ static TX_BYTE_POOL fx_app_byte_pool;
 #if 0
 __ALIGN_BEGIN static UCHAR ux_device_byte_pool_buffer[UX_DEVICE_APP_MEM_POOL_SIZE] __ALIGN_END;
 #else
-__attribute__((section(".axisram2_bss"), aligned(4))) //!< 位置是 NORMAL最低性能模式，读 Cache 关闭、写 Cache 关闭
+//__attribute__((section(".axisram2_bss"), aligned(4))) //!< 位置是 NORMAL最低性能模式，读 Cache 关闭、写 Cache 关闭
+__attribute__((section(".psram_nold"), aligned(4))) //!< 位置是 NORMAL最低性能模式，读 Cache 关闭、写 Cache 关闭
 static UCHAR ux_device_byte_pool_buffer[UX_DEVICE_APP_MEM_POOL_SIZE];
 #endif
 static TX_BYTE_POOL ux_device_app_byte_pool;

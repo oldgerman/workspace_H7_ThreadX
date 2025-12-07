@@ -1,8 +1,8 @@
 /**
   ******************************************************************************
-  * @file        app_demo_sd_filex.h
+  * @file        app_demo_psram.h
   * @author      OldGerman
-  * @created on  2025年12月4日
+  * @created on  2025年12月5日
   * @brief       
   ******************************************************************************
   * @attention
@@ -25,8 +25,8 @@
   */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef APP_DEMO_SD_FILEX_H_
-#define APP_DEMO_SD_FILEX_H_
+#ifndef APP_DEMO_PSRAM_H_
+#define APP_DEMO_PSRAM_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,21 +36,13 @@ extern "C" {
 #include "stdint.h"
 /* Exported types ------------------------------------------------------------*/
 /* Exported define -----------------------------------------------------------*/
-#define SD_SHOW_HIDE 0x01   // 显示隐藏内容
-#define FX_SD_MEDIA (&sdio_disk) // 放你的存储媒体结构体指针 比如 (&sdio_disk)
-#define MAX_TRAVEL_DEPTH 256 // 最大遍历深度，深度越大，占用空间越大
-#define _USE_UTF8_          // 使用UTF-8打印目录树，更美观
-
 /* Exported macro ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/
 /* Exported variables --------------------------------------------------------*/
 /* Exported functions --------------------------------------------------------*/
-uint16_t sd_com_tree(char *path, uint8_t depth_max, uint8_t tree_opt, void *workspace_ptr, size_t workspace_size);
-void SD_Tree_Root();
-void fxSdTestSpeed(void);
-
+uint8_t PSRAM_Test(uint32_t OCTOSPIx_BASE_ADDR);
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* APP_DEMO_SD_FILEX_H_ */
+#endif /* APP_DEMO_PSRAM_H_ */

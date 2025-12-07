@@ -1,8 +1,8 @@
 /**
   ******************************************************************************
-  * @file        app_demo_sd_filex.h
+  * @file        dynamic_ram.h
   * @author      OldGerman
-  * @created on  2025年12月4日
+  * @created on  Mar 20, 2023
   * @brief       
   ******************************************************************************
   * @attention
@@ -25,32 +25,34 @@
   */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef APP_DEMO_SD_FILEX_H_
-#define APP_DEMO_SD_FILEX_H_
+#ifndef RAM_DYNAMIC_RAM_H_
+#define RAM_DYNAMIC_RAM_H_
 
+/* 调整包含顺序：先包含标准库头文件，再包含其他头文件 */
+#include <stdint.h>  // 先包含标准库，确保size_t、uint32_t等类型已定义
+#include "rtx_memory.h"
+
+/* 修正extern "C"结构：C和C++编译器都能看到函数声明 */
 #ifdef __cplusplus
-extern "C" {
+extern "C" {  // C++编译器下，用extern "C"避免名字修饰（保证C文件能链接）
 #endif
 
-/* Includes ------------------------------------------------------------------*/
-#include "stdint.h"
+/* Exported functions --------------------------------------------------------*/
+uint32_t DRAM_Init();
+void* DRAM_SRAM1_aligned_4_malloc(size_t size);
+uint32_t DRAM_SRAM1_aligned_free(void* ptr_aligned);
+
+#ifdef __cplusplus
+}  // 关闭extern "C"
+#endif
+
 /* Exported types ------------------------------------------------------------*/
 /* Exported define -----------------------------------------------------------*/
-#define SD_SHOW_HIDE 0x01   // 显示隐藏内容
-#define FX_SD_MEDIA (&sdio_disk) // 放你的存储媒体结构体指针 比如 (&sdio_disk)
-#define MAX_TRAVEL_DEPTH 256 // 最大遍历深度，深度越大，占用空间越大
-#define _USE_UTF8_          // 使用UTF-8打印目录树，更美观
-
 /* Exported macro ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/
 /* Exported variables --------------------------------------------------------*/
-/* Exported functions --------------------------------------------------------*/
-uint16_t sd_com_tree(char *path, uint8_t depth_max, uint8_t tree_opt, void *workspace_ptr, size_t workspace_size);
-void SD_Tree_Root();
-void fxSdTestSpeed(void);
-
 #ifdef __cplusplus
-}
+//extern osRtxMemory DRAM_SRAM1;  // 仅C++需要的变量声明（C文件用不到）
 #endif
 
-#endif /* APP_DEMO_SD_FILEX_H_ */
+#endif /* RAM_DYNAMIC_RAM_H_ */
