@@ -411,6 +411,12 @@ UX_SLAVE_REQUEST_DATA_MAX_LENGTH 已拉满 64KB，超过CubeMX谜之限制 65.53
 
 65536缓冲区：在小IO（512B到32KB）下有明显提升，但大IO下提升一般
 
+### PSRAM读写测试
+
+Os优化，MPU配置为NORMAL最低性能模式
+
+![20251210-191533：PSRAM测试，Os优化，NORMAL最低性能模式](Images/20251210：PSRAM测试/20251210-191533：PSRAM测试，Os优化，NORMAL最低性能模式.png)
+
 ## printf / scanf 线程安全问题
 
 ### 方案一：在 printf 外面封装一个 App_Printf 加互斥锁（不推荐）
