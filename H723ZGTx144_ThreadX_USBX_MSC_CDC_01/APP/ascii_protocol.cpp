@@ -36,12 +36,6 @@ static void Respond(StreamSink& _responseChannel, bool _isError, const char* fmt
     va_end(args);
 }
 
-// 占位：复用你的RespondIsrStackUsageInWords函数
-static void RespondIsrStackUsageInWords(StreamSink& _responseChannel) {
-    Respond(_responseChannel, false, "ISR Stack Usage: 123 words");
-}
-
-
 // 命令执行函数类型：接收命令体（前缀后的内容）、回应通道，无返回值
 using CmdExecFunc = std::function<void(const std::string& cmdBody, StreamSink& response)>;
 
@@ -232,30 +226,30 @@ void initCommandRegistry() {
         } else {
             Respond(response, true, "Invalid float format: %s", cmdBody.c_str());
         }
-    }, "解析浮点数"); // 补充描述
+    }, "解析浮点数");
 
     // 2. 注册前缀'^'的命令：STOP/START/DISABLE
     registry.registerCommand('^', "STOP", [](const std::string&, StreamSink& response) {
         Respond(response, false, "Stopped ok");
-    }, "停止操作"); // 补充描述
+    }, "停止操作");
 
     registry.registerCommand('^', "START", [](const std::string&, StreamSink& response) {
         Respond(response, false, "Started ok");
-    }, "启动操作"); // 补充描述
+    }, "启动操作");
 
     registry.registerCommand('^', "DISABLE", [](const std::string&, StreamSink& response) {
         Respond(response, false, "Disabled ok");
-    }, "禁用操作"); // 补充描述
+    }, "禁用操作");
 
     // 3. 注册前缀'#'的命令：GETFLOAT/GETINT/CMDMODE
     registry.registerCommand('#', "GETFLOAT", [](const std::string&, StreamSink& response) {
         Respond(response, false, "ok %.2f %.2f %.2f %.2f %.2f %.2f",
                 1.23f, 4.56f, 7.89f, 9.87f, 6.54f, 3.21f);
-    }, "获取浮点数组"); // 补充描述
+    }, "获取浮点数组");
 
     registry.registerCommand('#', "GETINT", [](const std::string&, StreamSink& response) {
         Respond(response, false, "ok %d %d %d", 123, 456, 789);
-    }, "获取整数组"); // 补充描述
+    }, "获取整数组");
 
     registry.registerCommand('#', "CMDMODE", [](const std::string& cmdBody, StreamSink& response) {
         uint32_t mode;
@@ -265,39 +259,35 @@ void initCommandRegistry() {
         } else {
             Respond(response, true, "Invalid CMDMODE param: %s", cmdBody.c_str());
         }
-    }, "设置命令模式"); // 补充描述
+    }, "设置命令模式");
 
     // 4. 注册前缀'$'的命令：ISR_STACK/TEST_PSRAM
-    registry.registerCommand('$', "ISR_STACK", [](const std::string&, StreamSink& response) {
-        RespondIsrStackUsageInWords(response);
-    }, "查看ISR栈使用"); // 补充描述
+    registry.registerCommand('$', "TASK_INFO", [](const std::string&, StreamSink& response) {
+    	DispTaskInfo();
+    }, "查看任务信息");
 
     registry.registerCommand('$', "TEST_PSRAM", [](const std::string&, StreamSink& response) {
         Respond(response, false, "PSRAM Test started");
          PSRAM_Test(OCTOSPI1_BASE); // 你测试函数
-    }, "测试PSRAM"); // 补充描述
+    }, "测试PSRAM");
     registry.registerCommand('$', "TEST_SD_SPEED", [](const std::string&, StreamSink& response) {
         Respond(response, false, "开始SD卡速度测速");
     	fxSdTestSpeed();
-    }, "测试SD卡速度"); // 补充描述
+    }, "测试SD卡速度");
     registry.registerCommand('$', "TREE", [](const std::string&, StreamSink& response) {
         Respond(response, false, "Tree SD卡根目录：");
         SD_Tree_Root();
-    }, "Tree SD卡根目录"); // 补充描述
+    }, "Tree SD卡根目录");
 
     registry.registerCommand('$', "USB_MSC_REENUM", [](const std::string&, StreamSink& response) {
         Respond(response, false, "重新枚举USB MSC设备");
-        g_media_present = UX_FALSE; // PC 先弹出 U盘:
-        g_media_present = UX_TRUE; // 重新让电脑识别U盘
         g_media_changed = UX_TRUE; //
         printf("USB MSC 设备已重新枚举...\r\n");
-    }, "重新枚举USB MSC设备"); // 补充描述
+    }, "重新枚举USB MSC设备");
     registry.registerCommand('$', "RESET", [](const std::string&, StreamSink& response) {
         Respond(response, false, "重启系统");
         NVIC_SystemReset();
-    }, "重启系统"); // 补充描述
-
-
+    }, "重启系统");
 }
 
 // 新的OnAsciiCmd：彻底抛弃if-else，调用注册器解析

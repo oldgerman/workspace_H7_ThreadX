@@ -74,8 +74,8 @@ ULONG USBD_STORAGE_GetMediaBlocklength(VOID);
 UINT USBD_STORAGE_Pre_Init(VOID);
 UINT USBX_MSC_Pause(VOID);
 UINT USBX_MSC_Resume(VOID);
-extern volatile UINT g_media_present;
 extern volatile UINT g_media_changed;
+extern volatile UINT g_media_present;
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/

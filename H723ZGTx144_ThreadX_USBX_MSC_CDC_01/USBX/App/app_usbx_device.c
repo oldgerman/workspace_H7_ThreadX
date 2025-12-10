@@ -39,7 +39,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define UX_CDC_ACM_CMD_PARSE_THREAD_STACK_SIZE  8192U  //!< CDC ACM 命令拆包解析线程堆栈大小
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -285,7 +285,7 @@ UINT MX_USBX_Device_Init(VOID *memory_ptr)
 
   /* 初始化 CDC 命令拆包解析线程 */
   /* Allocate the stack for usbx cdc acm test thread */
-  ret = tx_byte_allocate(byte_pool, (VOID **) &pointer, UX_DEVICE_APP_THREAD_STACK_SIZE, TX_NO_WAIT);
+  ret = tx_byte_allocate(byte_pool, (VOID **) &pointer, UX_CDC_ACM_CMD_PARSE_THREAD_STACK_SIZE, TX_NO_WAIT);
   if (ret != TX_SUCCESS)
   {
     return TX_POOL_ERROR;
@@ -293,7 +293,7 @@ UINT MX_USBX_Device_Init(VOID *memory_ptr)
   /* Create the usbx_cdc_acm_thread_entry thread */
   ret = tx_thread_create(&ux_cdc_acm_cmd_parse_thread, "cdc_acm_cmd_parse_thread_entry",
 		  usbx_cdc_acm_cmd_parse_thread_entry, 1, pointer,
-          UX_DEVICE_APP_THREAD_STACK_SIZE, 20, 20, TX_NO_TIME_SLICE,
+		  UX_CDC_ACM_CMD_PARSE_THREAD_STACK_SIZE, 20, 20, TX_NO_TIME_SLICE,
           TX_AUTO_START);
   if (ret != TX_SUCCESS)
   {

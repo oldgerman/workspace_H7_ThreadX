@@ -2070,9 +2070,62 @@ windows删除Speed.txt文件夹后，发送命令测试SD卡速度（首次可�
 
 解决方案：是设备执行 fxSdTestSpeed() 的 g_media_present = UX_FALSE; // 通知 PC 弹出 U盘后，USBD_STORAGE_Status() 还未立即调度，需要让其检测到  g_media_present = UX_FALSE 后返回事件标记，让fxSdTestSpeed() 执行 g_media_present = UX_FALSE; 后阻塞等待这个事件标记后再开始测速
 
-## 待优化
+### （未解决）间歇性不认盘
 
-### 读写速度
+目前 Debug 模式使用以下配置可以100%识别出U盘
+
+```c
+#define UX_SLAVE_REQUEST_DATA_MAX_LENGTH            4096
+#define USBX_DEVICE_MEMORY_STACK_SIZE            1024*40
+#define UX_DEVICE_APP_MEM_POOL_SIZE              1024*70
+__attribute__((section(".axisram2_bss"), aligned(4))) //!< 位置是 NORMAL最低性能模式，读 Cache 关闭、写 Cache 关闭
+static UCHAR ux_device_byte_pool_buffer[UX_DEVICE_APP_MEM_POOL_SIZE];
+```
+
+以下配置则20%的概率识别到U盘
+
+```c
+#define UX_SLAVE_REQUEST_DATA_MAX_LENGTH            32768
+#define USBX_DEVICE_MEMORY_STACK_SIZE            1024*200
+#define UX_DEVICE_APP_MEM_POOL_SIZE              1024*256
+__attribute__((section(".psram_nold"), aligned(4))) //!< 位置是 NORMAL最低性能模式，读 Cache 关闭、写 Cache 关闭
+static UCHAR ux_device_byte_pool_buffer[UX_DEVICE_APP_MEM_POOL_SIZE];
+```
+
+是否和PSRAM启动时没有进行全0填充有关？但是不应该啊，CubeMX里配置了栈检查，在分配内存前会预先全填充的
+
+我觉得可能是目前 UX_DEVICE_ENDPOINT_BUFFER_OWNER 是1，CDC设备的 UX_DEVICE_CLASS_CDC_ACM_WRITE_BUFFER_SIZE 是 UX_SLAVE_REQUEST_DATA_MAX_LENGTH ，即 32768 太大导致
+
+```c
+/* Option: bulk out endpoint / read buffer size, must be larger than max packet size in framework, and aligned in 4-bytes.  */
+#ifndef UX_DEVICE_CLASS_CDC_ACM_READ_BUFFER_SIZE
+#define UX_DEVICE_CLASS_CDC_ACM_READ_BUFFER_SIZE                        512
+#endif
+
+/* Option: bulk in endpoint / write buffer size, must be larger than max packet size in framework, and aligned in 4-bytes.  */
+#ifndef UX_DEVICE_CLASS_CDC_ACM_WRITE_BUFFER_SIZE
+#define UX_DEVICE_CLASS_CDC_ACM_WRITE_BUFFER_SIZE                       UX_SLAVE_REQUEST_DATA_MAX_LENGTH
+#endif
+```
+
+当把 UX_DEVICE_ENDPOINT_BUFFER_OWNER  设置为 0，则每个端点都有 UX_SLAVE_REQUEST_DATA_MAX_LENGTH 的缓冲区，其实我只需要对 MSC 设备提供 收发 都是 32768 的缓冲区，但 CDC 也变成 32768 纯属浪费，USBX 的库这么写实在是不方便，只能将这几个 CubeMX生成的.h文件都排除了，我再复制一份自行配置
+
+可是微软文档推荐的默认是4096
+
+```c
+/* Defined, this value represents the maximum number of bytes that can be received or transmitted
+   on any endpoint. This value cannot be less than the maximum packet size of any endpoint. The default
+   is 4096 bytes but can be reduced in memory constrained environments. For cd-rom support in the storage
+   class, this value cannot be less than 2048.  */
+
+#define UX_SLAVE_REQUEST_DATA_MAX_LENGTH                    4096
+```
+
+安富莱例程也是4096
+
+## 其他已加入的实现
+
+### 提升虚拟U盘的读写速度
 
 USBX 调用 USBD_STORAGE_Read 和 USBD_STORAGE_Write 时，每次似乎只读写512字节大小，这会导致 无法进行批量传输，SD卡读写速度慢，能不能通过添加读写 FIFO 来加大每次读写SD卡的数据总大小
 
@@ -2315,9 +2368,65 @@ FileX的实现需要参考
 
 问题，目录树中文乱码
 
-得参考：[捣鼓使用 filex 读取sd 卡里面的中文文件名在 lcd 上显示中文全称](https://forum.anfulai.cn/forum.php?mod=viewthread&tid=129950)
+参考：[捣鼓使用 filex 读取sd 卡里面的中文文件名在 lcd 上显示中文全称](https://forum.anfulai.cn/forum.php?mod=viewthread&tid=129950)
 
-已经实现：
+需要使用 UTF16转UTF8的函数，求助于豆包测试可用：
+
+```c
+/**
+ * @brief UTF-16LE转UTF-8
+ * @param utf16 输入UTF-16LE字符串（以0x0000结尾）
+ * @param utf8 输出UTF-8字符串缓冲区
+ * @param utf8_len 输出缓冲区最大长度
+ * @return 转换后的UTF-8字符串长度（不含终止符），-1表示溢出
+ */
+static int utf16le_to_utf8(const uint16_t *utf16, char *utf8, size_t utf8_len) {
+    if (utf16 == NULL || utf8 == NULL || utf8_len == 0) return -1;
+    size_t i = 0, j = 0;
+    while (utf16[i] != 0x0000) {  // 遍历UTF-16字符串（以0结尾）
+        uint32_t code_point;
+        // 处理BMP（基本多文种平面）字符（U+0000~U+FFFF）
+        if ((utf16[i] & 0xFC00) != 0xD800) {  // 非代理对
+            code_point = utf16[i];
+            i++;
+        } else {
+            // 处理代理对（U+10000~U+10FFFF），需两个UTF-16编码
+            if ((utf16[i] & 0xFC00) != 0xD800 || utf16[i+1] == 0x0000) {
+                return -1;  // 无效代理对
+            }
+            code_point = ((utf16[i] & 0x03FF) << 10) | (utf16[i+1] & 0x03FF);
+            code_point += 0x10000;
+            i += 2;
+        }
+        // 转换为UTF-8编码
+        if (code_point <= 0x7F) {  // 1字节
+            if (j + 1 >= utf8_len) return -1;
+            utf8[j++] = (char)code_point;
+        } else if (code_point <= 0x7FF) {  // 2字节
+            if (j + 2 >= utf8_len) return -1;
+            utf8[j++] = (char)(0xC0 | (code_point >> 6));
+            utf8[j++] = (char)(0x80 | (code_point & 0x3F));
+        } else if (code_point <= 0xFFFF) {  // 3字节
+            if (j + 3 >= utf8_len) return -1;
+            utf8[j++] = (char)(0xE0 | (code_point >> 12));
+            utf8[j++] = (char)(0x80 | ((code_point >> 6) & 0x3F));
+            utf8[j++] = (char)(0x80 | (code_point & 0x3F));
+        } else if (code_point <= 0x10FFFF) {  // 4字节
+            if (j + 4 >= utf8_len) return -1;
+            utf8[j++] = (char)(0xF0 | (code_point >> 18));
+            utf8[j++] = (char)(0x80 | ((code_point >> 12) & 0x3F));
+            utf8[j++] = (char)(0x80 | ((code_point >> 6) & 0x3F));
+            utf8[j++] = (char)(0x80 | (code_point & 0x3F));
+        } else {
+            return -1;  // 无效Unicode码点
+        }
+    }
+    utf8[j] = '\0';  // 终止符
+    return j;
+}
+```
+
+目前已经实现对SD卡根目录进行Tree：
 
 ```scala
 $TREE
@@ -2381,13 +2490,112 @@ System:1
 
 ```
 
-打印特定目录待实现
+Tree特定目录待实现，cd目录、ls目录命令待实现。。。
 
-cd目录、ls目录命令待实现。。。
+### ThreadX CPU利用率、任务统计分析
 
-### ThreadX获取任务历史最大栈使用大小，CPU利用率
+安富莱 STM32-V7 开发板 ThreadX 内核教程：[第16章 ThreadX 原装任务统计分析功能实现]()
 
-https://blog.csdn.net/Simon223/article/details/120829375
+> ThreadX 原装任务统计分析功能的实现，支持MDK，IAR和GCC
+>
+> 对于Cortex-M内核，带**有DWT时钟周期计数器**，比如芯片主频是 100MHz，那么DWT统计的时
+> 钟周期分辨率就是10ns。 ThreadX就是借助此功能实现任务统计分析，使用简单，仅需使能就可以使用。M3，M4 和M7 内核都带这个功能，而M0 内核不带，使用中要注意。
+
+由于缺失的源码文件 ST 的 threadx 里没有，我下载了 eclipse 官方的 threadx仓库下的源码添加到代码工程：[execution_profile_kit](https://github.com/eclipse-threadx/threadx/tree/master/utility/execution_profile_kit)（注意，此文件夹内还有有 SMP 版本，这个是对于多核芯片使用的，本工程不需要）：
+
+注意，不要添加到以下位置，CubeMX生成时会删除！建议添加到AZURE_RTOS文件夹下
+
+![20251209-225218：添加eclipse仓库下的源码文件](Images/20251209：ThreadX原装任务统计分析/20251209-225218：添加eclipse仓库下的源码文件.png)
+
+然后跟着硬汉的教程，需要在工程设置中全局定义几个宏，对于CubeIDE，可以参考此帖设置这几个宏：[a bug about using execution profile kit in threadx](https://community.st.com/t5/stm32-mcus-embedded-software/a-bug-about-using-execution-profile-kit-in-threadx/td-p/672502)
+
+C 文件要添加宏定义：TX_EXECUTION_PROFILE_ENABLE、TX_CORTEX_M_EPK
+
+![](Images/20251209：ThreadX原装任务统计分析/20251209-230638：添加宏定义：C编译器.png)
+
+汇编文件添加宏定义： TX_EXECUTION_PROFILE_ENABLE、TX_ENABLE_EXECUTION_CHANGE_NOTIFY
+
+![](Images/20251209：ThreadX原装任务统计分析/20251209-230638：添加宏定义：汇编编译器.png)
+
+使能DWT时钟周期计时器
+
+CubeMX生成的工程 tx_initialize_low_level.S 已有使能
+
+![](Images/20251209：ThreadX原装任务统计分析/20251209-231158：使能DWT时钟周期计时器.png)
+
+配置好后，发现最大栈使用值不对
+
+![](Images/20251209：ThreadX原装任务统计分析/20251209-235754：最大栈使用值不对.png)
+
+搜索使用了 tx_thread_stack_highest_ptr 的函数：
+
+- 在  _tx_thread_stack_analyze() 函数打断点发现没有执行
+
+- 在 _tx_thread_create() 有以下宏检查
+
+  > ```c
+  > #ifdef TX_ENABLE_STACK_CHECKING
+  > 
+  >     /* Setup the highest usage stack pointer.  */
+  >     thread_ptr -> tx_thread_stack_highest_ptr =  thread_ptr -> tx_thread_stack_ptr;
+  > #endif
+  > ```
+
+原因：需要在CubeMX 里打开 `TX_ENABLE_STACK_CHECKING`，~~开启之后，我程序直接运行不起来了，第二天又可以了，不知道为啥~~
+
+开启栈检查后，TREE命令无法使用，一直在 `_tx_thread_stack_analyze()`的栈检查循环
+
+![](Images/20251209：ThreadX原装任务统计分析/20251210-121348：TREE命令无法使用，一直在_tx_thread_stack_analyze()的栈检查循环.png)
+
+```c
+VOID  _tx_thread_stack_analyze(TX_THREAD *thread_ptr)
+{
+......
+    do
+    {
+        /* Calculate the size again. */
+        size =  (ULONG) (TX_ULONG_POINTER_DIF(stack_highest, stack_lowest))/((ULONG) 2);
+        stack_ptr =  TX_ULONG_POINTER_ADD(stack_lowest, size);
+
+        /* Determine if the pattern is still there.  */
+        if (*stack_ptr != TX_STACK_FILL)
+        {
+            /* Update the stack highest, since we need to look in the upper half now.  */
+            stack_highest =  stack_ptr;
+        }
+        else
+        {
+            /* Update the stack lowest, since we need to look in the lower half now.  */
+            stack_lowest =  stack_ptr;
+        }
+
+    } while(size > ((ULONG) 1));
+......
+```
+
+同款BUG：[启动TX_ENABLE_STACK_CHECKING，Azure RTOS 线程 X 堆栈检查陷入循环](https://community.st.com/t5/stm32-mcus-embedded-software/azure-rtos-threadx-stack-checking-stuck-in-loop/td-p/668089)
+
+> ...当堆栈检查过程开始时（如上文所述），堆栈结束指针小于堆栈开始指针。这意味着上述代码将永远无法收敛，并陷入无限循环
+>
+> ...我也遇到了这个问题，看起来当发生真正的栈溢出时，栈检查代码会因为一个用 `TX_ULONG_POINTER_DIF()` 计算出来的巨大的 `size` 变量值而陷入循环。在我的情况下，发生溢出的线程上的 stack_highest 值低于 stack_lowest 值。
+>
+> 我修复了溢出问题后，程序就正常运行了。所以，如果你也遇到这个问题，我建议你检查所有线程是否存在溢出。你可以修改代码，在 `stack_highest < stack_lowest` 时设置一个易失性标志变量，并在该标志变量赋值处设置断点。然后，你可以使用 `thread_ptr` 来找出哪个线程出了问题。
+>
+> 最好把这段代码放在一个标记清晰的 while1 循环或其他类似结构中，以便明确指出问题是堆栈溢出而不是其他问题。在启用堆栈检查之前，我的应用程序一直“运行正常”，所以当我的代码突然卡在新的检查代码中时，我的第一反应并不是“也许我遇到了堆栈溢出”。
+>
+> 我猜很多人会在发现可疑行为（可能是堆栈溢出导致的）时启用这个功能，所以堆栈溢出时就让它失效就没什么意义了。另外，我不得不手动计算最大内存大小，因为IDE中的RTOS感知功能似乎没有注意到应该填充那一列。
+>
+> 我也遇到过同样的问题。
+>
+> 是的，那是因为我遇到了堆栈溢出。 
+>
+> 我认为，如果你已经识别出堆栈溢出，就不应该运行`_tx_thread_stack_analyze` 函数，因为你会遇到其他人已经解释过的问题
+
+经排查，是命令解析线程 `usbx_cdc_acm_cmd_parse_thread_entry`的堆栈溢出了，加大到8192解决：
+
+![](Images/20251209：ThreadX原装任务统计分析/20251210-124136：Tree命令使得cdc命令解析线程最大栈超过4092.png)
+
+
 
 ## 注
 

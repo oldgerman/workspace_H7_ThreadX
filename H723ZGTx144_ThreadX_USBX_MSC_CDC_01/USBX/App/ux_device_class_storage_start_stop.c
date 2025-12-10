@@ -98,6 +98,7 @@ UINT  _ux_device_class_storage_start_stop(UX_SLAVE_CLASS_STORAGE *storage, ULONG
 	{
 		extern VOID ux_app_msc_media_eject(VOID);
 		ux_app_msc_media_eject();   // 标记介质已移除
+		// 之后在 USBD_xxx 函数中将 media_status 置为介质不存在，使得电脑只能显示U盘图标，不可访问U盘
 	}
     /* Return successful completion.  */
     return(UX_SUCCESS);

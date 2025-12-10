@@ -122,7 +122,6 @@ ULONG                  trace_timestamp;
     /* Search the system for the supplied short file name and return the unicode name if there is a match.  */
     status =  _fx_unicode_directory_search(media_ptr, &dir_entry, (UCHAR *)source_short_name, 0, destination_unicode_name, destination_unicode_length, unicode_name_buffer_length);
 
-
     /* Determine if the search was successful.  */
     if (status != FX_SUCCESS)
     {

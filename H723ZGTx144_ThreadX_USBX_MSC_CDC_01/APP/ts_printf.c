@@ -41,17 +41,6 @@
 static TX_MUTEX AppPrintfSemp;
 
 /**
- * @brief 创建任务通讯相关的内核对象，需要在 AppTaskStart 任务中调用
- * @details 初始化 printf 打印所需的互斥锁，保证多线程打印不混乱
- * @return 无
- */
-void AppObjCreate(void)
-{
-    /* 创建 printf 互斥锁：不启用优先级继承 */
-    tx_mutex_create(&AppPrintfSemp, "AppPrintfSemp", TX_NO_INHERIT);
-}
-
-/**
  * @brief     线程安全的 printf 封装函数
  * @details   基于 ThreadX 互斥锁实现多线程打印互斥，避免打印内容交织乱码；
  *            内部使用固定缓冲区，需注意打印内容长度不超过缓冲区上限

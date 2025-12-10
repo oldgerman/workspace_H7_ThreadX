@@ -34,6 +34,8 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "main.h"
+#include "tx_execution_profile.h"  // EXECUTION_TIME
 
 /* USER CODE END Includes */
 
@@ -51,6 +53,11 @@ extern "C" {
 #define TX_APP_STACK_SIZE                       4096
 #define TX_APP_THREAD_PRIO                      10
 /* USER CODE BEGIN PD */
+/* 任务栈大小，单位字节 */
+#define APP_CFG_TASK_DEMO_FILEX_STACK_SIZE      4096U
+
+/* 任务优先级，数值越小优先级越高 */
+#define APP_CFG_TASK_DEMO_FILEX_PRIO            5U
 
 /* USER CODE END PD */
 
@@ -84,7 +91,15 @@ void tx_app_thread_entry(ULONG thread_input);
 /* USER CODE END EFP */
 
 /* USER CODE BEGIN 2 */
-
+/* Exported variables --------------------------------------------------------*/
+/* 队列 */
+extern TX_QUEUE g_cmd_demo_filex_queue;
+/* 方便RTOS里面使用 */
+//extern void SysTick_ISR(void);
+void DispTaskInfo(void);
+extern EXECUTION_TIME     _tx_execution_thread_time_total;
+extern EXECUTION_TIME     _tx_execution_isr_time_total;
+extern EXECUTION_TIME     _tx_execution_idle_time_total;
 /* USER CODE END 2 */
 
 #ifdef __cplusplus

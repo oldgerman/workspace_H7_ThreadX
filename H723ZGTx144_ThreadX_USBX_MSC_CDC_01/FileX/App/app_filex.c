@@ -121,7 +121,9 @@ UINT MX_FileX_Init(VOID *memory_ptr)
   fx_system_initialize();
 
   /* USER CODE BEGIN MX_FileX_Init 1*/
-
+  /* TODO：
+   * fx_system_initialize() 完成后发送信号量给 DemoFileX任务？
+   * 算了，此函数可以多次调用，DemoFileX() 再调用一次解决  */
   /* USER CODE END MX_FileX_Init 1*/
 
   return ret;

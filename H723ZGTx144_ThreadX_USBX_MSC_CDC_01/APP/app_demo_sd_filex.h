@@ -34,7 +34,21 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "stdint.h"
+#include "app_threadx.h"
 /* Exported types ------------------------------------------------------------*/
+/* 命令字符枚举 */
+typedef enum {
+    CMD_DEMO_FIEX_UNKNOWN           = 0,
+    CMD_DEMO_FIEX_VIEW_ROOT_DIR     = '1', // 查看根目录
+    CMD_DEMO_FIEX_CREATE_NEW_FILE   = '2', // 创建新文件
+    CMD_DEMO_FIEX_READ_FILE_DATA    = '3', // 读取文件
+    CMD_DEMO_FIEX_CREATE_DIR        = '4', // 创建目录
+    CMD_DEMO_FIEX_DELETE_DIR_FILE   = '5', // 删除目录/文件
+    CMD_DEMO_FIEX_TEST_SPEED        = '6', // 速度测试
+    CMD_DEMO_FIEX_OPEN_USB_STORAGE  = 'a', // 打开模拟U盘
+    CMD_DEMO_FIEX_CLOSE_USB_STORAGE = 'b'  // 关闭模拟U盘
+} Cmd_DemoFileXTypeDef;
+
 /* Exported define -----------------------------------------------------------*/
 #define SD_SHOW_HIDE 0x01   // 显示隐藏内容
 #define FX_SD_MEDIA (&sdio_disk) // 放你的存储媒体结构体指针 比如 (&sdio_disk)

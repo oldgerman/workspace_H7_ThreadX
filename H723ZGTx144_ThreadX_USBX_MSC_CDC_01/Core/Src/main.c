@@ -105,12 +105,14 @@ int main(void)
 	/** 将当前中断向量表设置为从FLASH复制到DITCM中的副本 */
 	SCB->VTOR = D1_DTCMRAM_BASE;
 #endif
+#if PREV_TEST_PSRAM
 	__IO uint8_t *mem_addr;
 	uint32_t address = 0;
 	uint16_t index1;/*index1 counter of bytes used when reading/
 	writing 256 bytes buffer */
 	uint16_t index2;/*index2 counter of 256 bytes buffer used when reading/
 	writing the 1Mbytes extended buffer */
+#endif
   /* Operation interrupt vector table end ------------------------------------*/
   /* USER CODE END 1 */
 
@@ -158,6 +160,8 @@ int main(void)
 	{
 		_Error_Handler(__FILE__, __LINE__);
 	}
+
+#if PREV_TEST_PSRAM //此段代码可能导致USB读写缓冲区中混入脏数据让电脑识别不到U盘
 	// H723ZGTx144：测试：OCTOSPI_CLK=90MHz DTR MODE 1MB 误码率 0，若提高到100MHz误码率飙升
 	int led = 0;
     uint64_t cnt_charW = 0;
@@ -186,7 +190,7 @@ int main(void)
 	uint8_t* p = OSPI_Array;
 	p++;
 	p--;
-
+#endif
 
   /* Check if SD card is present */
   //if(HAL_GPIO_ReadPin(GPIOG, GPIO_PIN_12) == GPIO_PIN_SET) { Error_Handler(); }
@@ -200,6 +204,8 @@ int main(void)
     Error_Handler();
   }
 
+  /* 内核开启前关闭HAL的时间基准 */
+  HAL_SuspendTick();
   /* USER CODE END 2 */
 
   MX_ThreadX_Init();

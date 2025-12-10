@@ -54,7 +54,7 @@ void MX_SDMMC2_SD_Init(void)
   if (HAL_SD_GetCardInfo(&hsd2, &pCardInfo) == HAL_OK)
   {
       // 获取成功后，可以访问pCardInfo中的信息
-      uint64_t total_capacity = (uint64_t)pCardInfo.BlockNbr * pCardInfo.BlockSize;
+//      uint64_t total_capacity = (uint64_t)pCardInfo.BlockNbr * pCardInfo.BlockSize;
       // total_capacity现在包含了SD卡的总容量（以字节为单位）
       // 您可以根据需要将其转换为MB或GB，例如：
       // float capacity_mb = (float)total_capacity / (1024 * 1024);

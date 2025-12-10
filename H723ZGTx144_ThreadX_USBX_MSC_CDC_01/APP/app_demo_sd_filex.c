@@ -2,6 +2,7 @@
  ******************************************************************************
  * @file        app_demo_sd_filex.c
  * @author      安富莱电子 www.armfly.com
+ * @modified    OldGerman
  * @created on  2025年12月3日
  * @brief
  ******************************************************************************
@@ -58,6 +59,7 @@
 #include "app_demo_sd_filex.h"
 
 /* Private typedef -----------------------------------------------------------*/
+
 /* Private define ------------------------------------------------------------*/
 #define bsp_GetRunTime tx_time_get
 
@@ -69,20 +71,23 @@
 /* Exported constants --------------------------------------------------------*/
 /* Private constants ---------------------------------------------------------*/
 /* Exported variables --------------------------------------------------------*/
+/* 全局变量 */
+
+
 /* Private variables ---------------------------------------------------------*/
 /* FileX测试所用静态内存 */
 //__attribute__((section(".axisram2_bss"), aligned(32))) uint32_t media_memory[64 * 1024];
-__attribute__((section(".psram_nold"), aligned(32))) uint32_t media_memory[64 * 1024];
+__attribute__((section(".psram_nold"), aligned(32)))  uint32_t media_memory[64 * 1024];
 ALIGN_32BYTES(char FsReadBuf[1024]);
 ALIGN_32BYTES(char FsWriteBuf[1024]) = {
-    "ThreadX FileX Write Demo \r\n www.armfly.com \r\n"};
+	"ThreadX FileX Write Demo \r\n www.armfly.com \r\n"};
 // ALIGN_32BYTES (uint8_t g_TestBuf[BUF_SIZE]);
 //__attribute__((section(".axisram2_bss"), aligned(32))) char FsReadBuf[1024];
 //__attribute__((section(".axisram2_data"), aligned(32), used)) char
 //FsWriteBuf[1024] = {"ThreadX FileX Write Demo \r\n www.armfly.com \r\n"};
 //__attribute__((section(".axisram2_bss"), aligned(32))) uint8_t
 //g_TestBuf[BUF_SIZE];
-__attribute__((section(".sram1_bss"), aligned(32))) uint8_t g_TestBuf[BUF_SIZE];
+__attribute__((section(".sram1_bss"), aligned(32)))  uint8_t g_TestBuf[BUF_SIZE];
 //__attribute__((section(".psram_nold"), aligned(32))) uint8_t g_TestBuf[BUF_SIZE];
 
 /* FileX相关变量 */
@@ -100,753 +105,779 @@ void fxSdTestSpeed(void);
 
 /* Function implementations --------------------------------------------------*/
 /*
-*********************************************************************************************************
-*	函 数 名: WriteFileTest
-*	功能说明: 测试文件读写速度
-*	形    参：无
-*	返 回 值: 无
-*********************************************************************************************************
-*/
+ *********************************************************************************************************
+ *	函 数 名: WriteFileTest
+ *	功能说明: 测试文件读写速度
+ *	形    参：无
+ *	返 回 值: 无
+ *********************************************************************************************************
+ */
 void fxSdTestSpeed(void) {
-  UINT status;
-  char path[64];
+	UINT status;
+	char path[64];
 
-  ULONG bw;
-  uint32_t i, k;
-  uint32_t runtime1, runtime2, timelen;
-  uint8_t err = 0;
-  static uint8_t s_ucTestSn = 0;
+	ULONG bw;
+	uint32_t i, k;
+	uint32_t runtime1, runtime2, timelen;
+	uint8_t err = 0;
+	static uint8_t s_ucTestSn = 0;
 
+	/* 先清零called_USBD_STORAGE_Status调度标记 */
+	extern uint8_t called_USBD_STORAGE_Status;
+	called_USBD_STORAGE_Status = 0;
+	g_media_present = UX_FALSE; // 通知 PC 弹出 U盘
 
-
-  /* 先清零called_USBD_STORAGE_Status调度标记 */
-  extern uint8_t called_USBD_STORAGE_Status;
-  called_USBD_STORAGE_Status = 0;
-  g_media_present = UX_FALSE; // 通知 PC 弹出 U盘
-
-  /* 阻塞等待USBD_STORAGE_Status被调用 */
-  while(called_USBD_STORAGE_Status == 0) {
-	  /* USBD_STORAGE_Status被调用且执行让主机认为介质不在的语句后
-	   * called_USBD_STORAGE_Status 为 1，退出while循环 */
-	  printf("SD卡测试准备开始，已通知主机弹出U盘\r\n");
-  	  break;
-  }
+	/* 阻塞等待USBD_STORAGE_Status被调用 */
+	while (called_USBD_STORAGE_Status == 0) {
+		/* USBD_STORAGE_Status被调用且执行让主机认为介质不在的语句后
+		 * called_USBD_STORAGE_Status 为 1，退出while循环 */
+		printf("SD卡测试准备开始，已通知主机弹出U盘\r\n");
+		break;
+	}
 #if 1
 
-  for (i = 0; i < sizeof(g_TestBuf); i++) {
-    g_TestBuf[i] = (i / 512) + '0';
-  }
+	for (i = 0; i < sizeof(g_TestBuf); i++) {
+		g_TestBuf[i] = (i / 512) + '0';
+	}
 
-  /* 挂载SD卡 */
-  status = fx_media_open(&sdio_disk, "STM32_SDIO_DISK", fx_stm32_sd_driver, 0,
-                         media_memory, sizeof(media_memory));
+	/* 挂载SD卡 */
+	status = fx_media_open(&sdio_disk, "STM32_SDIO_DISK", fx_stm32_sd_driver, 0,
+			media_memory, sizeof(media_memory));
 
-  if (status != FX_SUCCESS) {
-    printf("挂载文件系统失败 -- %d\r\n", status);
-    return;
-  }
+	if (status != FX_SUCCESS) {
+		printf("挂载文件系统失败 -- %d\r\n", status);
+		return;
+	}
 
-  /* 检测win11是否已经对SD卡修改过数据 */
-  extern uint8_t called_USBD_STORAGE_Flush;
-  if(called_USBD_STORAGE_Flush == 1) {
-	  printf("检测到电脑修改了SD卡文件, ");
-	  called_USBD_STORAGE_Flush = 0;
+	/* 检测win11是否已经对SD卡修改过数据 */
+	extern uint8_t called_USBD_STORAGE_Flush;
+	if (called_USBD_STORAGE_Flush == 1) {
+		printf("检测到电脑修改了SD卡文件, ");
+		called_USBD_STORAGE_Flush = 0;
 
-	  /* 刷新FileX缓存 */
-	  status = fx_media_flush(&sdio_disk);
+		/* 刷新FileX缓存 */
+		status = fx_media_flush(&sdio_disk);
 
-	  /* Check the file close status.  */
-	  if (status != FX_SUCCESS) {
-	    printf("FileX 缓存刷新失败\r\n");
-	  } else {
-		  printf("FileX 缓存刷新成功\r\n");
-	  }
-  }
+		/* Check the file close status.  */
+		if (status != FX_SUCCESS) {
+			printf("FileX 缓存刷新失败\r\n");
+		} else {
+			printf("FileX 缓存刷新成功\r\n");
+		}
+	}
 
-  /* 打开文件 */
-  sprintf(path, "Speed%02d.txt", s_ucTestSn++); /* 每写1次，序号递增 */
+	/* 打开文件 */
+	sprintf(path, "Speed%02d.txt", s_ucTestSn++); /* 每写1次，序号递增 */
 
-  /* 写一串数据 */
-  printf("开始写文件%s %dKB ...\r\n", path, TEST_FILE_LEN / 1024);
+	/* 写一串数据 */
+	printf("开始写文件%s %dKB ...\r\n", path, TEST_FILE_LEN / 1024);
 
-  /* 创建文件 */
-  status = fx_file_create(&sdio_disk, path);
+	/* 创建文件 */
+	status = fx_file_create(&sdio_disk, path);
 
-  /* 检测状态 */
-  if (status != FX_SUCCESS) {
-    /* 失败的话，可以考虑二次创建 */
-    if (status != FX_ALREADY_CREATED) {
-      printf("创建文件失败\r\n");
-    }
-  }
+	/* 检测状态 */
+	if (status != FX_SUCCESS) {
+		/* 失败的话，可以考虑二次创建 */
+		if (status != FX_ALREADY_CREATED) {
+			printf("创建文件失败\r\n");
+		}
+	}
 
-  /* 打开文件  */
-  status = fx_file_open(&sdio_disk, &fx_file, path, FX_OPEN_FOR_WRITE);
+	/* 打开文件  */
+	status = fx_file_open(&sdio_disk, &fx_file, path, FX_OPEN_FOR_WRITE);
 
-  if (status != FX_SUCCESS) {
-    printf("打开文件失败\r\n");
-  }
+	if (status != FX_SUCCESS) {
+		printf("打开文件失败\r\n");
+	}
 
-  /* 设置到起始位置读取  */
-  status = fx_file_seek(&fx_file, 0);
+	/* 设置到起始位置读取  */
+	status = fx_file_seek(&fx_file, 0);
 
-  if (status != FX_SUCCESS) {
-    printf("设置读取位置失败\r\n");
-  }
+	if (status != FX_SUCCESS) {
+		printf("设置读取位置失败\r\n");
+	}
 
-  runtime1 = bsp_GetRunTime(); /* 读取系统运行时间 */
-  for (i = 0; i < TEST_FILE_LEN / BUF_SIZE; i++) {
-    /* 写入字符串到文件  */
-    status = fx_file_write(&fx_file, g_TestBuf, sizeof(g_TestBuf));
+	runtime1 = bsp_GetRunTime(); /* 读取系统运行时间 */
+	for (i = 0; i < TEST_FILE_LEN / BUF_SIZE; i++) {
+		/* 写入字符串到文件  */
+		status = fx_file_write(&fx_file, g_TestBuf, sizeof(g_TestBuf));
 
-    if (status == FX_SUCCESS) {
-      if (((i + 1) % 8) == 0) {
-        printf(".");
-      }
-    } else {
-      err = 1;
-      printf("%s文件写失败\r\n", path);
-      break;
-    }
-  }
-  runtime2 = bsp_GetRunTime(); /* 读取系统运行时间 */
+		if (status == FX_SUCCESS) {
+			if (((i + 1) % 8) == 0) {
+				printf(".");
+			}
+		} else {
+			err = 1;
+			printf("%s文件写失败\r\n", path);
+			break;
+		}
+	}
+	runtime2 = bsp_GetRunTime(); /* 读取系统运行时间 */
 
-  if (err == 0) {
-    timelen = (runtime2 - runtime1);
-    printf("\r\n  写耗时 : %ldms   平均写速度 : %ldB/S (%ldKB/S)\r\n", timelen,
-           (TEST_FILE_LEN * 1000) / timelen,
-           ((TEST_FILE_LEN / 1024) * 1000) / timelen);
-    //-Og 4366KB/s@10MHz, 7787KB/s@50MHz
-  }
+	if (err == 0) {
+		timelen = (runtime2 - runtime1);
+		printf("\r\n  写耗时 : %ldms   平均写速度 : %ldB/S (%ldKB/S)\r\n", timelen,
+				(TEST_FILE_LEN * 1000) / timelen,
+				((TEST_FILE_LEN / 1024) * 1000) / timelen);
+		//-Og 4366KB/s@10MHz, 7787KB/s@50MHz
+	}
 
-  /* 关闭文件  */
-  status = fx_file_close(&fx_file);
+	/* 关闭文件  */
+	status = fx_file_close(&fx_file);
 
-  /* Check the file close status.  */
-  if (status != FX_SUCCESS) {
-    printf("关闭文件失败\r\n");
-  }
+	/* Check the file close status.  */
+	if (status != FX_SUCCESS) {
+		printf("关闭文件失败\r\n");
+	}
 
-  /* 保证文件写入全部生效 */
-  status = fx_media_flush(&sdio_disk);
+	/* 保证文件写入全部生效 */
+	status = fx_media_flush(&sdio_disk);
 
-  /* Check the file close status.  */
-  if (status != FX_SUCCESS) {
-    printf("fx_media_flush失败\r\n");
-  }
+	/* Check the file close status.  */
+	if (status != FX_SUCCESS) {
+		printf("fx_media_flush失败\r\n");
+	}
 
-  ////////////////////////////////////////////////////////////////////////////////////////////////////
-  /* 开始读文件测试 */
-  printf("开始读文件 %dKB ...\r\n", TEST_FILE_LEN / 1024);
+	////////////////////////////////////////////////////////////////////////////////////////////////////
+	/* 开始读文件测试 */
+	printf("开始读文件 %dKB ...\r\n", TEST_FILE_LEN / 1024);
 
-  /* 打开文件  */
-  status = fx_file_open(&sdio_disk, &fx_file, path, FX_OPEN_FOR_READ);
+	/* 打开文件  */
+	status = fx_file_open(&sdio_disk, &fx_file, path, FX_OPEN_FOR_READ);
 
-  if (status != FX_SUCCESS) {
-    printf("打开文件失败\r\n");
-  }
+	if (status != FX_SUCCESS) {
+		printf("打开文件失败\r\n");
+	}
 
-  /* 设置到起始位置读取  */
-  status = fx_file_seek(&fx_file, 0);
+	/* 设置到起始位置读取  */
+	status = fx_file_seek(&fx_file, 0);
 
-  if (status != FX_SUCCESS) {
-    printf("设置读取位置失败\r\n");
-  }
+	if (status != FX_SUCCESS) {
+		printf("设置读取位置失败\r\n");
+	}
 
-  runtime1 = bsp_GetRunTime(); /* 读取系统运行时间 */
-  for (i = 0; i < TEST_FILE_LEN / BUF_SIZE; i++) {
-    /* 写入字符串到文件  */
+	runtime1 = bsp_GetRunTime(); /* 读取系统运行时间 */
+	for (i = 0; i < TEST_FILE_LEN / BUF_SIZE; i++) {
+		/* 写入字符串到文件  */
 
-    status = fx_file_read(&fx_file, g_TestBuf, sizeof(g_TestBuf), &bw);
-    if (status == FX_SUCCESS) {
-      if (((i + 1) % 8) == 0) {
-        printf(".");
-      }
+		status = fx_file_read(&fx_file, g_TestBuf, sizeof(g_TestBuf), &bw);
+		if (status == FX_SUCCESS) {
+			if (((i + 1) % 8) == 0) {
+				printf(".");
+			}
 
-      /* 比较写入的数据是否正确，此语句会导致读卡速度结果降低到 3.5MBytes/S */
-      for (k = 0; k < sizeof(g_TestBuf); k++) {
-        if (g_TestBuf[k] != (k / 512) + '0') {
-          err = 1;
-          printf("Speed1.txt 文件读成功，但是数据出错\r\n");
-          break;
-        }
-      }
-      if (err == 1) {
-        break;
-      }
-    } else {
-      err = 1;
-      printf("Speed1.txt 文件读失败\r\n");
-      break;
-    }
-  }
-  runtime2 = bsp_GetRunTime(); /* 读取系统运行时间 */
+			/* 比较写入的数据是否正确，此语句会导致读卡速度结果降低到 3.5MBytes/S */
+			for (k = 0; k < sizeof(g_TestBuf); k++) {
+				if (g_TestBuf[k] != (k / 512) + '0') {
+					err = 1;
+					printf("Speed1.txt 文件读成功，但是数据出错\r\n");
+					break;
+				}
+			}
+			if (err == 1) {
+				break;
+			}
+		} else {
+			err = 1;
+			printf("Speed1.txt 文件读失败\r\n");
+			break;
+		}
+	}
+	runtime2 = bsp_GetRunTime(); /* 读取系统运行时间 */
 
-  if (err == 0) {
-    timelen = (runtime2 - runtime1);
-    printf("\r\n  读耗时 : %ldms   平均读速度 : %ldB/S (%ldKB/S)\r\n", timelen,
-           (TEST_FILE_LEN * 1000) / timelen,
-           ((TEST_FILE_LEN / 1024) * 1000) / timelen);
-    //-Og 6.965KB/s@50MHz
-  }
+	if (err == 0) {
+		timelen = (runtime2 - runtime1);
+		printf("\r\n  读耗时 : %ldms   平均读速度 : %ldB/S (%ldKB/S)\r\n", timelen,
+				(TEST_FILE_LEN * 1000) / timelen,
+				((TEST_FILE_LEN / 1024) * 1000) / timelen);
+		//-Og 6.965KB/s@50MHz
+	}
 
-  /* 读文件完成后关闭句柄 */
-  status = fx_file_close(&fx_file);
-  if (status != FX_SUCCESS) {
-    printf("关闭读文件失败 -- %d\r\n", status);
-  }
+	/* 读文件完成后关闭句柄 */
+	status = fx_file_close(&fx_file);
+	if (status != FX_SUCCESS) {
+		printf("关闭读文件失败 -- %d\r\n", status);
+	}
 
-  /* 删除文件 */
+	/* 删除文件 */
 //  uint8_t old_ucTestSn = s_ucTestSn - 1;
 //  sprintf(path, "Speed%02d.txt", old_ucTestSn);
 //  status = fx_file_delete(&sdio_disk, path);
 //  if (status != FX_SUCCESS) {
 //    printf("删除 %s 失败，错误码：%d\r\n", path, status);
 //  }
+	/* Flush确保删除生效 */
+	status = fx_media_flush(&sdio_disk);
+	if (status != FX_SUCCESS) {
+		printf("flush失败\r\n");
+	}
 
-  /* Flush确保删除生效 */
-  status = fx_media_flush(&sdio_disk);
-  if (status != FX_SUCCESS) {
-    printf("flush失败\r\n");
-  }
-
-  /* 最后关闭介质 */
-  status = fx_media_close(&sdio_disk);
-  if (status != FX_SUCCESS) {
-    printf("卸载文件系统失败 -- %d\r\n", status);
-  }
+	/* 最后关闭介质 */
+	status = fx_media_close(&sdio_disk);
+	if (status != FX_SUCCESS) {
+		printf("卸载文件系统失败 -- %d\r\n", status);
+	}
 
 #endif
-  g_media_present = UX_TRUE; // 重新让电脑识别U盘
-  g_media_changed = UX_TRUE; //
-  printf("测速完毕，USB 设备已重新枚举...\r\n");
+	g_media_present = UX_TRUE; // 重新让电脑识别U盘
+	g_media_changed = UX_TRUE; //
+	printf("测速完毕，USB 设备已重新枚举...\r\n");
 }
-
 
 /**
  * @brief Tree命令打印根目录
  */
-void SD_Tree_Root()
-{
-	  /* 先清零called_USBD_STORAGE_Status调度标记 */
-	  extern uint8_t called_USBD_STORAGE_Status;
-	  called_USBD_STORAGE_Status = 0;
-	  g_media_present = UX_FALSE; // 通知 PC 弹出 U盘
+void SD_Tree_Root() {
+	/* 先清零called_USBD_STORAGE_Status调度标记 */
+	extern uint8_t called_USBD_STORAGE_Status;
+	called_USBD_STORAGE_Status = 0;
+	g_media_present = UX_FALSE; // 通知 PC 弹出 U盘
 
-	  /* 阻塞等待USBD_STORAGE_Status被调用 */
-	  while(called_USBD_STORAGE_Status == 0) {
-		  /* USBD_STORAGE_Status被调用且执行让主机认为介质不在的语句后
-		   * called_USBD_STORAGE_Status 为 1，退出while循环 */
-		  printf("SD卡测试准备开始，已通知主机弹出U盘\r\n");
-	  	  break;
-	  }
+	/* 阻塞等待USBD_STORAGE_Status被调用 */
+	while (called_USBD_STORAGE_Status == 0) {
+		/* USBD_STORAGE_Status被调用且执行让主机认为介质不在的语句后
+		 * called_USBD_STORAGE_Status 为 1，退出while循环 */
+		printf("SD卡测试准备开始，已通知主机弹出U盘\r\n");
+		break;
+	}
 
+	uint16_t status = 0;
 
+	uint8_t workspace[MAX_TRAVEL_DEPTH] = { 0 };
 
-    uint16_t status = 0;
+	status = fx_media_open(&sdio_disk, "STM32_SDIO_DISK", fx_stm32_sd_driver, 0,
+			media_memory, sizeof(media_memory));
 
-    uint8_t workspace[MAX_TRAVEL_DEPTH] = {0};
+	if (status != FX_SUCCESS) {
+		printf("Open SD media failed! %#X\n", status);
+		return;
+	}
 
+	/* 检测win11是否已经对SD卡修改过数据 */
+	extern uint8_t called_USBD_STORAGE_Flush;
+	if (called_USBD_STORAGE_Flush == 1) {
+		printf("检测到电脑修改了SD卡文件, ");
+		called_USBD_STORAGE_Flush = 0;
 
-    status = fx_media_open(&sdio_disk, "STM32_SDIO_DISK", fx_stm32_sd_driver, 0,
-                           media_memory, sizeof(media_memory));
+		/* 刷新FileX缓存 */
+		status = fx_media_flush(&sdio_disk);
 
-    if (status != FX_SUCCESS)
-    {
-        printf("Open SD media failed! %#X\n", status);
-        return;
-    }
+		/* Check the file close status.  */
+		if (status != FX_SUCCESS) {
+			printf("FileX 缓存刷新失败\r\n");
+		} else {
+			printf("FileX 缓存刷新成功\r\n");
+		}
+	}
 
-    /* 检测win11是否已经对SD卡修改过数据 */
-    extern uint8_t called_USBD_STORAGE_Flush;
-    if(called_USBD_STORAGE_Flush == 1) {
-  	  printf("检测到电脑修改了SD卡文件, ");
-  	  called_USBD_STORAGE_Flush = 0;
+	/* 打印根目录,深度最大为10，显示隐藏文件 */
+	char *path = "/";
+	status = sd_com_tree(path, 10, SD_SHOW_HIDE, workspace, sizeof(workspace));
+	if (status != FX_SUCCESS) {
+		printf("Print tree [%s] failed! %#X\n", path, status);
+		return;
+	}
 
-  	  /* 刷新FileX缓存 */
-  	  status = fx_media_flush(&sdio_disk);
-
-  	  /* Check the file close status.  */
-  	  if (status != FX_SUCCESS) {
-  	    printf("FileX 缓存刷新失败\r\n");
-  	  } else {
-  		  printf("FileX 缓存刷新成功\r\n");
-  	  }
-    }
-
-
-    /* 打印根目录,深度最大为10，显示隐藏文件 */
-    char *path = "/";
-    status = sd_com_tree(path, 10, SD_SHOW_HIDE, workspace, sizeof(workspace));
-    if (status != FX_SUCCESS)
-    {
-        printf("Print tree [%s] failed! %#X\n", path, status);
-        return;
-    }
-
-    /* 关闭SD卡 */
-    status = fx_media_close(FX_SD_MEDIA);
-    if (status != FX_SUCCESS)
-    {
+	/* 关闭SD卡 */
+	status = fx_media_close(FX_SD_MEDIA);
+	if (status != FX_SUCCESS) {
 //        printf("Close SD media failed! %#X\n", path, status);
+	}
+
+	g_media_present = UX_TRUE; // 重新让电脑识别U盘
+	g_media_changed = UX_TRUE; //
+}
+
+/*
+ *********************************************************************************************************
+ *	函 数 名: DemoFatFS
+ *	功能说明: FatFS文件系统演示主程序
+ *	形    参: 无
+ *	返 回 值: 无
+ *********************************************************************************************************
+ */
+void DemoFileX(void)
+{
+    uint8_t cmd;
+    UINT queue_status;
+
+    /* 打印命令列表，用户通过USB CDC操作 */
+//    DispMenu();
+
+    /* FatFS初始化 */
+//    fx_system_initialize();
+
+
+    while (1)
+    {
+        /* 从队列接收命令：阻塞等待（TX_WAIT_FOREVER），直到有命令到来 */
+        queue_status = tx_queue_receive(
+            &g_cmd_demo_filex_queue,  // 目标队列
+            &cmd,                // 接收缓冲区（存储命令字符）
+            TX_WAIT_FOREVER      // 无限等待，无命令时任务休眠
+        );
+
+        if (queue_status == TX_SUCCESS)
+        {
+            printf("\r\n收到命令：%c\r\n", cmd);
+            /* 处理命令 */
+            switch (cmd)
+            {
+                case CMD_DEMO_FIEX_VIEW_ROOT_DIR:
+                    printf("【1 - ViewRootDir】\r\n");
+                    ViewRootDir();
+                    break;
+
+                case CMD_DEMO_FIEX_CREATE_NEW_FILE:
+                    printf("【2 - CreateNewFile】\r\n");
+                    CreateNewFile();
+                    break;
+
+                case CMD_DEMO_FIEX_READ_FILE_DATA:
+                    printf("【3 - ReadFileData】\r\n");
+                    ReadFileData();
+                    break;
+
+                case CMD_DEMO_FIEX_CREATE_DIR:
+                    printf("【4 - CreateDir】\r\n");
+                    CreateDir();
+                    break;
+
+                case CMD_DEMO_FIEX_DELETE_DIR_FILE:
+                    printf("【5 - DeleteDirFile】\r\n");
+                    DeleteDirFile();
+                    break;
+
+                case CMD_DEMO_FIEX_TEST_SPEED:
+                    printf("【6 - TestSpeed】\r\n");
+                    fxSdTestSpeed();
+                    break;
+
+                case CMD_DEMO_FIEX_OPEN_USB_STORAGE:
+                    printf("【a - OpenUsbStorage】\r\n");
+//                    OpenUsbStorage();
+                    break;
+
+                case CMD_DEMO_FIEX_CLOSE_USB_STORAGE:
+                    printf("【b - CloseUsbStorage】\r\n");
+//                    CloseUsbStorage();
+                    break;
+
+                default:
+                    printf("未知命令：%c，请重新输入！\r\n", cmd);
+                    DispMenu();
+                    break;
+            }
+        }
+        else
+        {
+            /* 队列接收失败（理论上TX_WAIT_FOREVER不会触发），容错处理 */
+            printf("队列接收错误，状态码：%d\r\n", queue_status);
+            tx_thread_sleep(10);
+        }
     }
-
-    g_media_present = UX_TRUE; // 重新让电脑识别U盘
-    g_media_changed = UX_TRUE; //
 }
-
 /*
-*********************************************************************************************************
-*	函 数 名: DemoFatFS
-*	功能说明: FatFS文件系统演示主程序
-*	形    参: 无
-*	返 回 值: 无
-*********************************************************************************************************
-*/
-
-void DemoFileX(void) {
-  fxSdTestSpeed();
-  // switch()
-  //	case'0':
-  //	DispMenu();
-  //	break;
-  //	case '1':
-  //	printf("【1 - ViewRootDir】\r\n");
-  //	ViewRootDir();		/* 显示SD卡根目录下的文件名 */
-  //	break;
-  //
-  //	case '2':
-  //	printf("【2 - CreateNewFile】\r\n");
-  //	CreateNewFile();	/* 创建一个新文件,写入一个字符串 */
-  //	break;
-  //
-  //	case '3':
-  //	printf("【3 - ReadFileData】\r\n");
-  //	ReadFileData();		/* 读取根目录下armfly.txt的内容 */
-  //	break;
-  //
-  //	case '4':
-  //	printf("【4 - CreateDir】\r\n");
-  //	CreateDir();		/* 创建目录 */
-  //	break;
-  //
-  //	case '5':
-  //	printf("【5 - DeleteDirFile】\r\n");
-  //	DeleteDirFile();	/* 删除目录和文件 */
-  //	break;
-  //
-  //	case '6':
-  //	printf("【6 - TestSpeed】\r\n");
-  //	WriteFileTest();	/* 速度测试 */
-  //	break;
-  //
-  //	default:
-  //
-  //	break;
-}
-
-/*
-*********************************************************************************************************
-*	函 数 名: DispMenu
-*	功能说明: 显示操作提示菜单
-*	形    参：无
-*	返 回 值: 无
-*********************************************************************************************************
-*/
+ *********************************************************************************************************
+ *	函 数 名: DispMenu
+ *	功能说明: 显示操作提示菜单
+ *	形    参：无
+ *	返 回 值: 无
+ *********************************************************************************************************
+ */
 static void DispMenu(void) {
-  printf("\r\n------------------------------------------------\r\n");
-  printf("请选择操作命令，打开SD卡模拟U盘操作期间不支持再调用命令1-6:\r\n");
-  printf("1 - 显示根目录下的文件列表\r\n");
-  printf("2 - 创建一个新文件armfly.txt\r\n");
-  printf("3 - 读armfly.txt文件的内容\r\n");
-  printf("4 - 创建目录\r\n");
-  printf("5 - 删除文件和目录\r\n");
-  printf("6 - 读写文件速度测试\r\n");
+	printf("\r\n------------------------------------------------\r\n");
+	printf("请选择操作命令，打开SD卡模拟U盘操作期间不支持再调用命令1-6:\r\n");
+	printf("1 - 显示根目录下的文件列表\r\n");
+	printf("2 - 创建一个新文件armfly.txt\r\n");
+	printf("3 - 读armfly.txt文件的内容\r\n");
+	printf("4 - 创建目录\r\n");
+	printf("5 - 删除文件和目录\r\n");
+	printf("6 - 读写文件速度测试\r\n");
 }
 
 /*
-*********************************************************************************************************
-*	函 数 名: ViewRootDir
-*	功能说明: 显示SD卡根目录下的文件名
-*	形    参：无
-*	返 回 值: 无
-*********************************************************************************************************
-*/
+ *********************************************************************************************************
+ *	函 数 名: ViewRootDir
+ *	功能说明: 显示SD卡根目录下的文件名
+ *	形    参：无
+ *	返 回 值: 无
+ *********************************************************************************************************
+ */
 extern SD_HandleTypeDef hsd2;
 static void ViewRootDir(void) {
-  UINT status;
-  UINT attributes;
-  ULONG size;
-  UINT year;
-  UINT month;
-  UINT day;
-  UINT hour;
-  UINT minute;
-  UINT second;
-  UINT cnt;
-  ULONG64 available_bytes;
+	UINT status;
+	UINT attributes;
+	ULONG size;
+	UINT year;
+	UINT month;
+	UINT day;
+	UINT hour;
+	UINT minute;
+	UINT second;
+	UINT cnt;
+	ULONG64 available_bytes;
 
-  /* 挂载SD卡 */
-  status = fx_media_open(&sdio_disk, "STM32_SDIO_DISK", fx_stm32_sd_driver, 0,
-                         media_memory, sizeof(media_memory));
+	/* 挂载SD卡 */
+	status = fx_media_open(&sdio_disk, "STM32_SDIO_DISK", fx_stm32_sd_driver, 0,
+			media_memory, sizeof(media_memory));
 
-  if (status != FX_SUCCESS) {
-    printf("挂载文件系统失败 -- %d\r\n", status);
-    return;
-  }
+	if (status != FX_SUCCESS) {
+		printf("挂载文件系统失败 -- %d\r\n", status);
+		return;
+	}
 
-  printf("属性        |  文件大小 | 短文件名 | 长文件名\r\n");
-  for (cnt = 0;; cnt++) {
-    /* 读取目录项，索引会自动下移 */
-    status = fx_directory_next_full_entry_find(
-        &sdio_disk, entry_name, &attributes, &size, &year, &month, &day, &hour,
-        &minute, &second);
+	printf("属性        |  文件大小 | 短文件名 | 长文件名\r\n");
+	for (cnt = 0;; cnt++) {
+		/* 读取目录项，索引会自动下移 */
+		status = fx_directory_next_full_entry_find(&sdio_disk, entry_name,
+				&attributes, &size, &year, &month, &day, &hour, &minute,
+				&second);
 
-    if (status != FX_SUCCESS || entry_name[0] == 0) {
-      break;
-    }
+		if (status != FX_SUCCESS || entry_name[0] == 0) {
+			break;
+		}
 
-    if (entry_name[0] == '.') {
-      continue;
-    }
+		if (entry_name[0] == '.') {
+			continue;
+		}
 
-    /* 判断是文件还是子目录 */
-    if (attributes & FX_DIRECTORY) {
-      printf("目录  ");
-    } else {
-      printf("文件  ");
-    }
+		/* 判断是文件还是子目录 */
+		if (attributes & FX_DIRECTORY) {
+			printf("目录  ");
+		} else {
+			printf("文件  ");
+		}
 
-    /* 打印文件大小, 最大4G */
-    printf(" %10d", (int)size);
+		/* 打印文件大小, 最大4G */
+		printf(" %10d", (int) size);
 
-    printf("  %s\r\n", (char *)entry_name); /* 长文件名 */
-  }
+		printf("  %s\r\n", (char*) entry_name); /* 长文件名 */
+	}
 
-  /* SD卡剩余容量大小 */
-  status = fx_media_extended_space_available(&sdio_disk, &available_bytes);
+	/* SD卡剩余容量大小 */
+	status = fx_media_extended_space_available(&sdio_disk, &available_bytes);
 
-  if (status == FX_SUCCESS) {
-    printf("SD卡剩余容量大小 -- %lldMB\r\n", available_bytes / 1024 / 1024);
-  }
+	if (status == FX_SUCCESS) {
+		printf("SD卡剩余容量大小 -- %lldMB\r\n", available_bytes / 1024 / 1024);
+	}
 
-  /* 卸载SD卡 */
-  status = fx_media_close(&sdio_disk);
+	/* 卸载SD卡 */
+	status = fx_media_close(&sdio_disk);
 
-  if (status != FX_SUCCESS) {
-    printf("卸载文件系统卸载失败 -- %d\r\n", status);
-  }
+	if (status != FX_SUCCESS) {
+		printf("卸载文件系统卸载失败 -- %d\r\n", status);
+	}
 }
 
 /*
-*********************************************************************************************************
-*	函 数 名: CreateNewFile
-*	功能说明: 在SD卡创建一个新文件，文件内容填写“www.armfly.com”
-*	形    参：无
-*	返 回 值: 无
-*********************************************************************************************************
-*/
+ *********************************************************************************************************
+ *	函 数 名: CreateNewFile
+ *	功能说明: 在SD卡创建一个新文件，文件内容填写“www.armfly.com”
+ *	形    参：无
+ *	返 回 值: 无
+ *********************************************************************************************************
+ */
 static void CreateNewFile(void) {
-  UINT status;
+	UINT status;
 
-  /* 挂载SD卡 */
-  status = fx_media_open(&sdio_disk, "STM32_SDIO_DISK", fx_stm32_sd_driver, 0,
-                         media_memory, sizeof(media_memory));
+	/* 挂载SD卡 */
+	status = fx_media_open(&sdio_disk, "STM32_SDIO_DISK", fx_stm32_sd_driver, 0,
+			media_memory, sizeof(media_memory));
 
-  if (status != FX_SUCCESS) {
-    printf("挂载文件系统失败 -- %d\r\n", status);
-    return;
-  }
+	if (status != FX_SUCCESS) {
+		printf("挂载文件系统失败 -- %d\r\n", status);
+		return;
+	}
 
-  /* 创建文件 */
-  status = fx_file_create(&sdio_disk, "armfly.txt");
+	/* 创建文件 */
+	status = fx_file_create(&sdio_disk, "armfly.txt");
 
-  /* 检测状态 */
-  if (status != FX_SUCCESS) {
-    /* 失败的话，可以考虑二次创建 */
-    if (status != FX_ALREADY_CREATED) {
-      printf("创建文件失败\r\n");
-    }
-  }
+	/* 检测状态 */
+	if (status != FX_SUCCESS) {
+		/* 失败的话，可以考虑二次创建 */
+		if (status != FX_ALREADY_CREATED) {
+			printf("创建文件失败\r\n");
+		}
+	}
 
-  /* 打开文件  */
-  status = fx_file_open(&sdio_disk, &fx_file, "armfly.txt", FX_OPEN_FOR_WRITE);
+	/* 打开文件  */
+	status = fx_file_open(&sdio_disk, &fx_file, "armfly.txt",
+			FX_OPEN_FOR_WRITE);
 
-  if (status != FX_SUCCESS) {
-    printf("打开文件失败\r\n");
-  }
+	if (status != FX_SUCCESS) {
+		printf("打开文件失败\r\n");
+	}
 
-  /* 设置到起始位置读取  */
-  status = fx_file_seek(&fx_file, 0);
+	/* 设置到起始位置读取  */
+	status = fx_file_seek(&fx_file, 0);
 
-  if (status != FX_SUCCESS) {
-    printf("设置读取位置失败\r\n");
-  }
+	if (status != FX_SUCCESS) {
+		printf("设置读取位置失败\r\n");
+	}
 
-  /* 写入字符串到文件  */
-  status = fx_file_write(&fx_file, FsWriteBuf, strlen(FsWriteBuf));
+	/* 写入字符串到文件  */
+	status = fx_file_write(&fx_file, FsWriteBuf, strlen(FsWriteBuf));
 
-  if (status == FX_SUCCESS) {
-    printf("armfly.txt 文件写入成功\r\n");
-  } else {
-    printf("armfly.txt 文件写入失败 %d\r\n", status);
-  }
+	if (status == FX_SUCCESS) {
+		printf("armfly.txt 文件写入成功\r\n");
+	} else {
+		printf("armfly.txt 文件写入失败 %d\r\n", status);
+	}
 
-  /* 关闭文件  */
-  status = fx_file_close(&fx_file);
+	/* 关闭文件  */
+	status = fx_file_close(&fx_file);
 
-  /* Check the file close status.  */
-  if (status != FX_SUCCESS) {
-    printf("关闭文件失败\r\n");
-  }
+	/* Check the file close status.  */
+	if (status != FX_SUCCESS) {
+		printf("关闭文件失败\r\n");
+	}
 
-  /* 保证文件写入全部生效 */
-  status = fx_media_flush(&sdio_disk);
+	/* 保证文件写入全部生效 */
+	status = fx_media_flush(&sdio_disk);
 
-  if (status != FX_SUCCESS) {
-    printf("flush失败\r\n");
-  }
+	if (status != FX_SUCCESS) {
+		printf("flush失败\r\n");
+	}
 
-  /* 卸载SD卡 */
-  status = fx_media_close(&sdio_disk);
+	/* 卸载SD卡 */
+	status = fx_media_close(&sdio_disk);
 
-  if (status != FX_SUCCESS) {
-    printf("卸载文件系统卸载失败 -- %d\r\n", status);
-  }
+	if (status != FX_SUCCESS) {
+		printf("卸载文件系统卸载失败 -- %d\r\n", status);
+	}
 }
 
 /*
-*********************************************************************************************************
-*	函 数 名: ReadFileData
-*	功能说明: 读取文件armfly.txt前128个字符，并打印到串口
-*	形    参：无
-*	返 回 值: 无
-*********************************************************************************************************
-*/
+ *********************************************************************************************************
+ *	函 数 名: ReadFileData
+ *	功能说明: 读取文件armfly.txt前128个字符，并打印到串口
+ *	形    参：无
+ *	返 回 值: 无
+ *********************************************************************************************************
+ */
 static void ReadFileData(void) {
-  UINT status;
-  ULONG bw;
+	UINT status;
+	ULONG bw;
 
-  /* 挂载SD卡 */
-  status = fx_media_open(&sdio_disk, "STM32_SDIO_DISK", fx_stm32_sd_driver, 0,
-                         media_memory, sizeof(media_memory));
+	/* 挂载SD卡 */
+	status = fx_media_open(&sdio_disk, "STM32_SDIO_DISK", fx_stm32_sd_driver, 0,
+			media_memory, sizeof(media_memory));
 
-  if (status != FX_SUCCESS) {
-    printf("挂载文件系统失败 -- %d\r\n", status);
-    return;
-  }
+	if (status != FX_SUCCESS) {
+		printf("挂载文件系统失败 -- %d\r\n", status);
+		return;
+	}
 
-  /* 打开文件  */
-  status = fx_file_open(&sdio_disk, &fx_file, "armfly.txt", FX_OPEN_FOR_READ);
+	/* 打开文件  */
+	status = fx_file_open(&sdio_disk, &fx_file, "armfly.txt", FX_OPEN_FOR_READ);
 
-  if (status != FX_SUCCESS) {
-    printf("打开文件失败\r\n");
-  }
+	if (status != FX_SUCCESS) {
+		printf("打开文件失败\r\n");
+	}
 
-  /* 设置到起始位置读取  */
-  status = fx_file_seek(&fx_file, 0);
+	/* 设置到起始位置读取  */
+	status = fx_file_seek(&fx_file, 0);
 
-  if (status != FX_SUCCESS) {
-    printf("设置读取位置失败\r\n");
-  }
+	if (status != FX_SUCCESS) {
+		printf("设置读取位置失败\r\n");
+	}
 
-  /*  */
-  status = fx_file_read(&fx_file, FsReadBuf, sizeof(FsReadBuf), &bw);
+	/*  */
+	status = fx_file_read(&fx_file, FsReadBuf, sizeof(FsReadBuf), &bw);
 
-  printf("--%sReadLen = %d\r\n", FsReadBuf, (int)bw);
+	printf("--%sReadLen = %d\r\n", FsReadBuf, (int) bw);
 
-  if ((status != FX_SUCCESS)) {
-    printf("读取失败\r\n");
-  }
+	if ((status != FX_SUCCESS)) {
+		printf("读取失败\r\n");
+	}
 
-  /* 关闭文件  */
-  status = fx_file_close(&fx_file);
+	/* 关闭文件  */
+	status = fx_file_close(&fx_file);
 
-  if (status != FX_SUCCESS) {
-    printf("关闭文件失败\r\n");
-  }
+	if (status != FX_SUCCESS) {
+		printf("关闭文件失败\r\n");
+	}
 
-  /* 卸载SD卡 */
-  status = fx_media_close(&sdio_disk);
+	/* 卸载SD卡 */
+	status = fx_media_close(&sdio_disk);
 
-  if (status != FX_SUCCESS) {
-    printf("卸载文件系统卸载失败 -- %d\r\n", status);
-  }
+	if (status != FX_SUCCESS) {
+		printf("卸载文件系统卸载失败 -- %d\r\n", status);
+	}
 }
 
 /*
-*********************************************************************************************************
-*	函 数 名: CreateDir
-*	功能说明: 在SD卡根目录创建Dir1和Dir2目录，在Dir1目录下创建子目录Dir1_1
-*	形    参：无
-*	返 回 值: 无
-*********************************************************************************************************
-*/
+ *********************************************************************************************************
+ *	函 数 名: CreateDir
+ *	功能说明: 在SD卡根目录创建Dir1和Dir2目录，在Dir1目录下创建子目录Dir1_1
+ *	形    参：无
+ *	返 回 值: 无
+ *********************************************************************************************************
+ */
 static void CreateDir(void) {
-  UINT status;
+	UINT status;
 
-  /* 挂载SD卡 */
-  status = fx_media_open(&sdio_disk, "STM32_SDIO_DISK", fx_stm32_sd_driver, 0,
-                         media_memory, sizeof(media_memory));
+	/* 挂载SD卡 */
+	status = fx_media_open(&sdio_disk, "STM32_SDIO_DISK", fx_stm32_sd_driver, 0,
+			media_memory, sizeof(media_memory));
 
-  if (status != FX_SUCCESS) {
-    printf("挂载文件系统失败 -- %d\r\n", status);
-    return;
-  }
+	if (status != FX_SUCCESS) {
+		printf("挂载文件系统失败 -- %d\r\n", status);
+		return;
+	}
 
-  /* 创建目录/Dir1 */
-  status = fx_directory_create(&sdio_disk, "Dir1");
+	/* 创建目录/Dir1 */
+	status = fx_directory_create(&sdio_disk, "Dir1");
 
-  if (status == FX_SUCCESS) {
-    printf("文件夹Dir1创建成功\r\n");
-  } else if (status == FX_ALREADY_CREATED) {
-    printf("Dir1 目录已经存在(%d)\r\n", status);
-  } else {
-    printf("fx_directory_create Dir1 失败 (%d)\r\n", status);
-    return;
-  }
+	if (status == FX_SUCCESS) {
+		printf("文件夹Dir1创建成功\r\n");
+	} else if (status == FX_ALREADY_CREATED) {
+		printf("Dir1 目录已经存在(%d)\r\n", status);
+	} else {
+		printf("fx_directory_create Dir1 失败 (%d)\r\n", status);
+		return;
+	}
 
-  /* 创建目录/Dir2 */
-  status = fx_directory_create(&sdio_disk, "Dir2");
+	/* 创建目录/Dir2 */
+	status = fx_directory_create(&sdio_disk, "Dir2");
 
-  if (status == FX_SUCCESS) {
-    printf("文件夹Dir2创建成功\r\n");
-  } else if (status == FX_ALREADY_CREATED) {
-    printf("Dir2 目录已经存在(%d)\r\n", status);
-  } else {
-    printf("fx_directory_create Dir2 失败 (%d)\r\n", status);
-    return;
-  }
+	if (status == FX_SUCCESS) {
+		printf("文件夹Dir2创建成功\r\n");
+	} else if (status == FX_ALREADY_CREATED) {
+		printf("Dir2 目录已经存在(%d)\r\n", status);
+	} else {
+		printf("fx_directory_create Dir2 失败 (%d)\r\n", status);
+		return;
+	}
 
-  /* 创建子目录 /Dir1/Dir1_1	   注意：创建子目录Dir1_1时，必须先创建好Dir1 ？
-   */
-  status = fx_directory_create(&sdio_disk, "Dir1/Dir1_1");
+	/* 创建子目录 /Dir1/Dir1_1	   注意：创建子目录Dir1_1时，必须先创建好Dir1 ？
+	 */
+	status = fx_directory_create(&sdio_disk, "Dir1/Dir1_1");
 
-  if (status == FX_SUCCESS) {
-    printf("文件夹Dir1/Dir1_1创建成功\r\n");
-  } else if (status == FX_ALREADY_CREATED) {
-    printf("Dir1/Dir1_1 目录已经存在(%d)\r\n", status);
-  } else {
-    printf("fx_directory_create Dir1/Dir1_1 失败 (%d)\r\n", status);
-    return;
-  }
+	if (status == FX_SUCCESS) {
+		printf("文件夹Dir1/Dir1_1创建成功\r\n");
+	} else if (status == FX_ALREADY_CREATED) {
+		printf("Dir1/Dir1_1 目录已经存在(%d)\r\n", status);
+	} else {
+		printf("fx_directory_create Dir1/Dir1_1 失败 (%d)\r\n", status);
+		return;
+	}
 
-  /* 保证文件写入全部生效 */
-  status = fx_media_flush(&sdio_disk);
+	/* 保证文件写入全部生效 */
+	status = fx_media_flush(&sdio_disk);
 
-  if (status != FX_SUCCESS) {
-    printf("flush失败\r\n");
-  }
+	if (status != FX_SUCCESS) {
+		printf("flush失败\r\n");
+	}
 
-  /* 卸载SD卡 */
-  status = fx_media_close(&sdio_disk);
+	/* 卸载SD卡 */
+	status = fx_media_close(&sdio_disk);
 
-  if (status != FX_SUCCESS) {
-    printf("卸载文件系统卸载失败 -- %d\r\n", status);
-  }
+	if (status != FX_SUCCESS) {
+		printf("卸载文件系统卸载失败 -- %d\r\n", status);
+	}
 }
 
 /*
-*********************************************************************************************************
-*	函 数 名: DeleteDirFile
-*	功能说明: 删除SD卡根目录下的 armfly.txt 文件和 Dir1，Dir2 目录
-*	形    参：无
-*	返 回 值: 无
-*********************************************************************************************************
-*/
+ *********************************************************************************************************
+ *	函 数 名: DeleteDirFile
+ *	功能说明: 删除SD卡根目录下的 armfly.txt 文件和 Dir1，Dir2 目录
+ *	形    参：无
+ *	返 回 值: 无
+ *********************************************************************************************************
+ */
 static void DeleteDirFile(void) {
-  UINT status;
-  UINT i;
-  char path[50];
+	UINT status;
+	UINT i;
+	char path[50];
 
-  /* 挂载SD卡 */
-  status = fx_media_open(&sdio_disk, "STM32_SDIO_DISK", fx_stm32_sd_driver, 0,
-                         media_memory, sizeof(media_memory));
+	/* 挂载SD卡 */
+	status = fx_media_open(&sdio_disk, "STM32_SDIO_DISK", fx_stm32_sd_driver, 0,
+			media_memory, sizeof(media_memory));
 
-  if (status != FX_SUCCESS) {
-    printf("挂载文件系统失败 -- %d\r\n", status);
-    return;
-  }
+	if (status != FX_SUCCESS) {
+		printf("挂载文件系统失败 -- %d\r\n", status);
+		return;
+	}
 
-  /* 删除目录/Dir1 【因为还存在目录非空（存在子目录)，所以这次删除会失败】*/
-  status = fx_directory_delete(&sdio_disk, "Dir1");
+	/* 删除目录/Dir1 【因为还存在目录非空（存在子目录)，所以这次删除会失败】*/
+	status = fx_directory_delete(&sdio_disk, "Dir1");
 
-  if (status == FX_SUCCESS) {
-    printf("删除目录Dir1成功\r\n");
-  } else if (status == FX_NOT_FOUND) {
-    printf("没有发现文件或目录 :%s\r\n", "/Dir1");
-  } else {
-    printf("删除Dir1失败(错误代码 = %d) 文件只读或目录非空\r\n", status);
-  }
+	if (status == FX_SUCCESS) {
+		printf("删除目录Dir1成功\r\n");
+	} else if (status == FX_NOT_FOUND) {
+		printf("没有发现文件或目录 :%s\r\n", "/Dir1");
+	} else {
+		printf("删除Dir1失败(错误代码 = %d) 文件只读或目录非空\r\n", status);
+	}
 
-  /* 先删除目录/Dir1/Dir1_1 */
-  status = fx_directory_delete(&sdio_disk, "Dir1/Dir1_1");
+	/* 先删除目录/Dir1/Dir1_1 */
+	status = fx_directory_delete(&sdio_disk, "Dir1/Dir1_1");
 
-  if (status == FX_SUCCESS) {
-    printf("删除目录Dir1/Dir1_1成功\r\n");
-  } else if (status == FX_NOT_FOUND) {
-    printf("没有发现文件或目录 :%s\r\n", "Dir1/Dir1_1");
-  } else {
-    printf("删除Dir1/Dir1_1失败(错误代码 = %d) 文件只读或目录非空\r\n", status);
-  }
+	if (status == FX_SUCCESS) {
+		printf("删除目录Dir1/Dir1_1成功\r\n");
+	} else if (status == FX_NOT_FOUND) {
+		printf("没有发现文件或目录 :%s\r\n", "Dir1/Dir1_1");
+	} else {
+		printf("删除Dir1/Dir1_1失败(错误代码 = %d) 文件只读或目录非空\r\n", status);
+	}
 
-  /* 删除目录/Dir1*/
-  status = fx_directory_delete(&sdio_disk, "Dir1");
+	/* 删除目录/Dir1*/
+	status = fx_directory_delete(&sdio_disk, "Dir1");
 
-  if (status == FX_SUCCESS) {
-    printf("删除目录Dir1成功\r\n");
-  } else if (status == FX_NOT_FOUND) {
-    printf("没有发现文件或目录 :%s\r\n", "Dir1");
-  } else {
-    printf("删除Dir1失败(错误代码 = %d) 文件只读或目录非空\r\n", status);
-  }
+	if (status == FX_SUCCESS) {
+		printf("删除目录Dir1成功\r\n");
+	} else if (status == FX_NOT_FOUND) {
+		printf("没有发现文件或目录 :%s\r\n", "Dir1");
+	} else {
+		printf("删除Dir1失败(错误代码 = %d) 文件只读或目录非空\r\n", status);
+	}
 
-  /* 删除目录/Dir2*/
-  status = fx_directory_delete(&sdio_disk, "Dir2");
+	/* 删除目录/Dir2*/
+	status = fx_directory_delete(&sdio_disk, "Dir2");
 
-  if (status == FX_SUCCESS) {
-    printf("删除目录Dir2成功\r\n");
-  } else if (status == FX_NOT_FOUND) {
-    printf("没有发现文件或目录 :%s\r\n", "Dir2");
-  } else {
-    printf("删除Dir2失败(错误代码 = %d) 文件只读或目录非空\r\n", status);
-  }
+	if (status == FX_SUCCESS) {
+		printf("删除目录Dir2成功\r\n");
+	} else if (status == FX_NOT_FOUND) {
+		printf("没有发现文件或目录 :%s\r\n", "Dir2");
+	} else {
+		printf("删除Dir2失败(错误代码 = %d) 文件只读或目录非空\r\n", status);
+	}
 
-  /* 删除文件 armfly.txt */
-  status = fx_file_delete(&sdio_disk, "armfly.txt");
+	/* 删除文件 armfly.txt */
+	status = fx_file_delete(&sdio_disk, "armfly.txt");
 
-  if (status == FX_SUCCESS) {
-    printf("删除目录armfly.txt成功\r\n");
-  } else if (status == FX_NOT_FOUND) {
-    printf("没有发现文件或目录 :%s\r\n", "armfly.txt");
-  } else {
-    printf("删除armfly.txt失败(错误代码 = %d) 文件只读或目录非空\r\n", status);
-  }
+	if (status == FX_SUCCESS) {
+		printf("删除目录armfly.txt成功\r\n");
+	} else if (status == FX_NOT_FOUND) {
+		printf("没有发现文件或目录 :%s\r\n", "armfly.txt");
+	} else {
+		printf("删除armfly.txt失败(错误代码 = %d) 文件只读或目录非空\r\n", status);
+	}
 
-  /* 删除文件 speed1.txt */
-  for (i = 0; i < 20; i++) {
-    sprintf(path, "Speed%02d.txt", i); /* 每写1次，序号递增 */
+	/* 删除文件 speed1.txt */
+	for (i = 0; i < 20; i++) {
+		sprintf(path, "Speed%02d.txt", i); /* 每写1次，序号递增 */
 
-    status = fx_file_delete(&sdio_disk, path);
+		status = fx_file_delete(&sdio_disk, path);
 
-    if (status == FX_SUCCESS) {
-      printf("删除文件%s成功\r\n", path);
-    } else if (status == FX_NOT_FOUND) {
-      printf("没有发现文件:%s\r\n", path);
-    } else {
-      printf("删除%s文件失败(错误代码 = %d) 文件只读或目录非空\r\n", path,
-             status);
-    }
-  }
+		if (status == FX_SUCCESS) {
+			printf("删除文件%s成功\r\n", path);
+		} else if (status == FX_NOT_FOUND) {
+			printf("没有发现文件:%s\r\n", path);
+		} else {
+			printf("删除%s文件失败(错误代码 = %d) 文件只读或目录非空\r\n", path, status);
+		}
+	}
 
-  /* 卸载SD卡 */
-  status = fx_media_close(&sdio_disk);
+	/* 卸载SD卡 */
+	status = fx_media_close(&sdio_disk);
 
-  if (status != FX_SUCCESS) {
-    printf("卸载文件系统卸载失败 -- %d\r\n", status);
-  }
+	if (status != FX_SUCCESS) {
+		printf("卸载文件系统卸载失败 -- %d\r\n", status);
+	}
 }
-
 
 /***************************** 安富莱电子 www.armfly.com (END OF FILE)
  * *********************************/
