@@ -50,14 +50,14 @@ extern "C" {
 /* USER CODE END EC */
 
 /* Private defines -----------------------------------------------------------*/
-#define TX_APP_STACK_SIZE                       4096
-#define TX_APP_THREAD_PRIO                      10
+#define TX_APP_STACK_SIZE                       2048
+#define TX_APP_THREAD_PRIO                      2
 /* USER CODE BEGIN PD */
 /* 任务栈大小，单位字节 */
 #define APP_CFG_TASK_DEMO_FILEX_STACK_SIZE      4096U
 
 /* 任务优先级，数值越小优先级越高 */
-#define APP_CFG_TASK_DEMO_FILEX_PRIO            5U
+#define APP_CFG_TASK_DEMO_FILEX_PRIO            10U
 
 /* USER CODE END PD */
 

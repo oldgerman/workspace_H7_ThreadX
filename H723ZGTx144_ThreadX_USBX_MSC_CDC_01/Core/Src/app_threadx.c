@@ -119,6 +119,7 @@ void tx_app_thread_entry(ULONG thread_input)
 
 	/* 外设初始化 */
 //    bsp_Init();
+
 	/* 创建App任务 */
 	AppTaskCreate();
 
@@ -212,8 +213,7 @@ void DispTaskInfo(void) {
 	p_tcb = &tx_app_thread;
 
 	/* 打印标题 */
-	printf(
-			"===================================================================\r\n");
+	printf("===================================================================\r\n");
 	printf("CPU利用率 = %5.2f%%\r\n", OSCPUUsage);
 	printf("任务执行时间 = %.9fs\r\n",
 			(double) _tx_execution_thread_time_total / SystemCoreClock);
@@ -225,8 +225,7 @@ void DispTaskInfo(void) {
 			(double) (_tx_execution_thread_time_total
 					+ _tx_execution_idle_time_total
 					+ _tx_execution_isr_time_total) / SystemCoreClock);
-	printf(
-			"===================================================================\r\n");
+	printf("===================================================================\r\n");
 	printf(" 任务优先级 任务栈大小 当前使用栈  最大栈使用   运行次数    任务名\r\n");
 	printf("   Prio     StackSize   CurStack    MaxStack    RunCount   Taskname\r\n");
 

@@ -62,6 +62,7 @@ void SystemClock_Config(void);
 static void MPU_Config(void);
 /* USER CODE BEGIN PFP */
 static void Configure_APMemory(void);
+void InitDWT(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -151,6 +152,7 @@ int main(void)
   MX_SDMMC2_SD_Init();
   /* USER CODE BEGIN 2 */
 
+  InitDWT();
 
   Configure_APMemory();
 
@@ -365,6 +367,25 @@ static void Configure_APMemory(void)
 		__NOP();
 	}
 }
+
+/**
+ * @brief 使能DWT时钟周期计时器
+ */
+#define  DWT_CYCCNT  *(volatile unsigned int *)0xE0001004
+#define  DWT_CR      *(volatile unsigned int *)0xE0001000
+#define  DEM_CR      *(volatile unsigned int *)0xE000EDFC
+#define  DBGMCU_CR   *(volatile unsigned int *)0xE0042004
+
+#define  DEM_CR_TRCENA               (1 << 24)
+#define  DWT_CR_CYCCNTENA            (1 <<  0)
+
+void InitDWT(void)
+{
+	DEM_CR         |= (unsigned int)DEM_CR_TRCENA;
+	DWT_CYCCNT      = (unsigned int)0u;
+	DWT_CR         |= (unsigned int)DWT_CR_CYCCNTENA;
+}
+
 /* USER CODE END 4 */
 
  /* MPU Configuration */

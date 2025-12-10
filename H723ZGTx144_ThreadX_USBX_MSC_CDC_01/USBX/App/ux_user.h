@@ -121,7 +121,7 @@
    though the compiler's equivalent of the -D option.  */
 
 /* Define USBX Generic Thread Stack Size.  */
-#define UX_THREAD_STACK_SIZE                                4096
+/* #define UX_THREAD_STACK_SIZE                             (2 * 1024) */
 
 /* Define USBX Host Enum Thread Stack Size. The default is to use UX_THREAD_STACK_SIZE */
 /* #define UX_HOST_ENUM_THREAD_STACK_SIZE                   UX_THREAD_STACK_SIZE  */
@@ -550,7 +550,7 @@
 
 /* Defined, this value represents the size of the log pool.
 */
-#define UX_DEBUG_LOG_SIZE             4096
+#define UX_DEBUG_LOG_SIZE             0
 
 /* Defined, this macro represents the non-blocking function to return time tick.
    This macro is used only in standalone mode.
@@ -585,11 +585,11 @@
 
 /* This is the ThreadX priority value for the USBX enumeration threads that monitors the bus topology */
 
-/* #define UX_THREAD_PRIORITY_ENUM           20 */
+#define UX_THREAD_PRIORITY_ENUM              4
 
 /* This is the ThreadX priority value for the standard USBX threads */
 
-/* #define UX_THREAD_PRIORITY_CLASS          20 */
+#define UX_THREAD_PRIORITY_CLASS             4
 
 /* This is the ThreadX priority value for the USBX HID keyboard class. */
 

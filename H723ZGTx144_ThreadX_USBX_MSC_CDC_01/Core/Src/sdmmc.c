@@ -51,15 +51,24 @@ void MX_SDMMC2_SD_Init(void)
   /* USER CODE BEGIN SDMMC2_Init 2 */
   HAL_SD_CardInfoTypeDef pCardInfo; // 定义SD卡信息结构体
   // 获取SD卡信息
-  if (HAL_SD_GetCardInfo(&hsd2, &pCardInfo) == HAL_OK)
+  if (HAL_SD_GetCardInfo(&hsd2, &pCardInfo) != HAL_OK)
   {
-      // 获取成功后，可以访问pCardInfo中的信息
-//      uint64_t total_capacity = (uint64_t)pCardInfo.BlockNbr * pCardInfo.BlockSize;
-      // total_capacity现在包含了SD卡的总容量（以字节为单位）
-      // 您可以根据需要将其转换为MB或GB，例如：
-      // float capacity_mb = (float)total_capacity / (1024 * 1024);
-      //HAL_Delay(10);
+	  while(1);
   }
+	// 获取成功后，可以访问pCardInfo中的信息
+	// uint64_t total_capacity = (uint64_t)pCardInfo.BlockNbr * pCardInfo.BlockSize;
+	// total_capacity现在包含了SD卡的总容量（以字节为单位）
+	// 您可以根据需要将其转换为MB或GB，例如：
+	// float capacity_mb = (float)total_capacity / (1024 * 1024);
+	//HAL_Delay(10);
+
+  // 切换速度为HS
+  if(HAL_SD_ConfigSpeedBusOperation(&hsd2, SDMMC_SPEED_MODE_HIGH) != HAL_OK)
+  {
+	  while(1);
+  }
+
+
   /* USER CODE END SDMMC2_Init 2 */
 
 }
